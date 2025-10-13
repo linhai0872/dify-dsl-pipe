@@ -1,0 +1,81 @@
+# ===== Git 相关 =====
+.git
+.gitignore
+.gitattributes
+
+# ===== Python 相关 =====
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ===== 虚拟环境 =====
+venv/
+ENV/
+env/
+.venv
+
+# ===== IDE 相关 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ===== 测试相关 =====
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# ===== 日志文件 =====
+*.log
+logs/
+
+# ===== 临时文件 =====
+tmp/
+temp/
+*.tmp
+
+# ===== 备份文件 =====
+backups/
+*.zip
+*.tar.gz
+*.bak
+
+# ===== 配置文件（实际配置） =====
+config.yaml
+.env
+
+# ===== 文档 =====
+# 保留 README 文件
+docs/
+QUICKSTART.md
+
+# ===== CI/CD =====
+.github/
+.gitlab-ci.yml
+
+# ===== Docker 相关 =====
+docker-compose.override.yml
+Dockerfile.dev
+

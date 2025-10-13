@@ -1,0 +1,108 @@
+# ===== Dify DSL 导出工具 Docker Compose 配置 =====
+# 用于快速部署和定时执行导出任务
+#
+# 配置说明：
+# - 本配置文件不覆盖 config.yaml 中的配置
+# - 所有业务配置都应该在 config.yaml 中进行
+# - 此处只负责容器运行环境（挂载、网络、资源限制等）
+
+version: '3.8'
+
+services:
+  # ===== 主服务：DSL 导出工具 =====
+  dify-exporter:
+    # 使用本地构建的镜像
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    # 容器名称
+    container_name: dify-dsl-exporter
+    
+    # 环境变量（仅系统级配置，不覆盖 config.yaml）
+    environment:
+      # 时区设置
+      - TZ=Asia/Shanghai
+    
+    # 卷挂载
+    # 重要：请根据 config.yaml 中配置的路径来调整下面的挂载点
+    volumes:
+      # 1. 挂载配置文件（必需）
+      - ./config.yaml:/app/config.yaml:ro
+      
+      # 2. 挂载本地存储目录（仅当使用本地存储时需要）
+      #    格式：宿主机路径:config.yaml中配置的路径
+      #    示例：如果 config.yaml 中 storage.local.path 是 "/opt/dify-backups"
+      #          则这里应该是：/opt/dify-backups:/opt/dify-backups
+      #    或者：如果 config.yaml 中配置的是 "/data/dify-backups"
+      #          则这里应该是：/path/on/host:/data/dify-backups
+      - /opt/dify-backups:/opt/dify-backups
+      
+      # 3. 挂载临时目录（可选，如果 config.yaml 中自定义了 temp_dir）
+      #    默认情况下使用容器内的 /tmp，无需挂载
+      # - /tmp/dify-export:/tmp/dify-export
+    
+    # 网络模式（如果需要访问宿主机上的 Dify）
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+    
+    # 资源限制（可选）
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1'
+    #       memory: 1G
+    #     reservations:
+    #       cpus: '0.5'
+    #       memory: 512M
+    
+    # 重启策略
+    restart: "no"  # 单次执行不自动重启
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ===== 使用说明 =====
+#
+# 前置步骤：
+# 1. 编辑 config.yaml 配置所有参数（Dify API、存储后端等）
+# 2. 如果使用本地存储，确保上面 volumes 中的路径与 config.yaml 一致
+# 3. 确保宿主机目录有写权限（或自动创建）
+#
+# 使用示例：
+# 
+# 1. 首次构建镜像：
+#    docker-compose build
+#
+# 2. 单次执行导出：
+#    docker-compose run --rm dify-exporter
+#
+# 3. 测试模式（不上传）：
+#    docker-compose run --rm dify-exporter --dry-run
+#
+# 4. 配合 cron 定时执行（在宿主机配置 crontab）：
+#    # 每天凌晨 2 点执行
+#    0 2 * * * cd /opt/dify-linhai/dify-dsl-exporter && docker-compose run --rm dify-exporter >> /var/log/dify-export.log 2>&1
+#
+# 5. 查看容器日志（如果使用 up 而不是 run）：
+#    docker-compose logs -f dify-exporter
+#
+# ===== 路径映射说明 =====
+#
+# config.yaml 中的路径 → docker-compose.yml volumes 映射示例：
+#
+# 场景 1：使用绝对路径（推荐）
+#   config.yaml:  storage.local.path: "/opt/dify-backups"
+#   volumes:      - /opt/dify-backups:/opt/dify-backups
+#
+# 场景 2：使用容器内标准路径
+#   config.yaml:  storage.local.path: "/data/backups"
+#   volumes:      - /your/host/path:/data/backups
+#
+# 场景 3：使用相对路径（不推荐在 Docker 中使用）
+#   请改用绝对路径，确保路径一致性
+

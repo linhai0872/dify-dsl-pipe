@@ -1,0 +1,67 @@
+# ===== Python 相关 =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ===== 虚拟环境 =====
+venv/
+ENV/
+env/
+.venv/
+
+# ===== IDE 相关 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# ===== 配置文件（实际配置） =====
+config.yaml
+.env
+
+# ===== 日志文件 =====
+*.log
+logs/
+
+# ===== 临时文件 =====
+tmp/
+temp/
+*.tmp
+
+# ===== 备份和导出文件 =====
+backups/
+*.zip
+*.tar.gz
+*.bak
+dify-export-*/
+
+# ===== 测试相关 =====
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# ===== 系统文件 =====
+Thumbs.db
