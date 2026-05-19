@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "dify-dsl-pipe": {
+      "source": "linhai0872/dify-dsl-pipe",
+      "sourceType": "github",
+      "skillPath": "skills/dify-dsl-pipe/SKILL.md",
+      "computedHash": "46d98589829dbb2c7a67708e8b6f53e42ac332302bd2393b84fd4cc3e99ff031"
+    }
+  }
+}
