@@ -3,7 +3,7 @@ import type { DifyClient } from "./client.js";
 import type { DifyApp, AppFilter, ExportResult, ExportedApp, PipeState } from "./types.js";
 import type { StorageBackend } from "../storage/interface.js";
 import type { ExportOptions } from "../config/types.js";
-import { buildFilePath } from "../utils/naming.js";
+import { buildFilePath, sanitize } from "../utils/naming.js";
 import { log, formatDuration, formatSize } from "../utils/logger.js";
 
 export async function exportApps(
@@ -114,25 +114,26 @@ async function exportSingleApp(
     try {
       const versions = await client.getWorkflowVersions(app.id);
       for (const ver of versions) {
-        const verName = ver.marked_name ?? ver.version ?? "unnamed";
-        if (verName.toLowerCase() === "draft") continue;
+        if ((ver.marked_name ?? ver.version ?? "").toLowerCase() === "draft") continue;
 
         try {
           const verDsl = await client.exportAppDSL(app.id, opts.includeSecret, ver.id);
           const rawDate = ver.created_at;
           const verDate = rawDate
-            ? new Date(typeof rawDate === "number" ? rawDate * 1000 : rawDate).toISOString().slice(0, 10).replace(/-/g, "")
+            ? new Date(typeof rawDate === "number" ? rawDate * 1000 : rawDate)
+                .toISOString().slice(0, 16).replace(/[-T:]/g, "")
             : undefined;
-          const versionPattern = opts.pattern.replace(".yml", `_versions/${verName}_{date}.yml`);
+          // 有名字用版本名，未命名用 app 名+时间戳
+          const versionLabel = ver.marked_name ?? sanitize(app.name);
+          const versionPattern = opts.pattern.replace(".yml", `_versions/${versionLabel}_{date}.yml`);
           const verPath = buildFilePath(versionPattern, {
             ...ctx,
-            version: verName,
             date: verDate,
           });
           await storage.write(verPath, verDsl);
           exported.versions.push({ version: ver, dslContent: verDsl, filePath: verPath });
         } catch {
-          log.debug(`  跳过版本 ${verName}: 导出失败`);
+          log.debug(`  跳过版本 ${ver.marked_name ?? ver.id.slice(0, 8)}: 导出失败`);
         }
       }
     } catch {

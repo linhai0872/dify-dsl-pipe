@@ -1,8 +1,8 @@
 import type { DifyApp } from "../core/types.js";
 
 const PRESETS: Record<string, string> = {
-  flat: "{name}_{date}.yml",
-  "by-type": "{type}/{name}_{date}.yml",
+  flat: "{name}.yml",
+  "by-type": "{type}/{name}.yml",
   "by-tag": "{tags}/{name}_{date}.yml",
   "by-workspace": "{workspace}/{type}/{name}_{date}.yml",
   full: "{instance}/{workspace}/{type}/{name}_{date}.yml",

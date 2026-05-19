@@ -46,9 +46,11 @@ npx dify-dsl-pipe export [options]
 |------|---------|
 | `flat` | `AppName.yml` |
 | `by-type`（默认） | `workflow/AppName.yml` |
-| `by-tag` | `标签名/AppName.yml` |
-| `by-workspace` | `WorkspaceName/AppName.yml` |
-| `full` | `WorkspaceName/type/AppName.yml` |
+| `by-tag` | `标签名/AppName_日期.yml` |
+| `by-workspace` | `WorkspaceName/type/AppName_日期.yml` |
+| `full` | `InstanceName/WorkspaceName/type/AppName_日期.yml` |
+
+`flat` 和 `by-type` 为覆盖写模式（无日期），适合配合 git 做版本管理；其余预设为归档模式（含日期），每次导出新增文件。版本历史（`_versions/` 子目录）始终使用版本创建时间戳，命名版本保留版本名，未命名版本以 app 名+时间戳区分。
 
 运行 `npx dify-dsl-pipe presets` 查看完整列表。
 
