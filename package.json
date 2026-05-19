@@ -1,6 +1,6 @@
 {
   "name": "dify-dsl-pipe",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Dify DSL 一站式管道工具 — 导出、导入、跨实例迁移",
   "type": "module",
   "bin": {
