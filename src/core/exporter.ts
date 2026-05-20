@@ -123,10 +123,15 @@ async function exportSingleApp(
             ? new Date(typeof rawDate === "number" ? rawDate * 1000 : rawDate)
                 .toISOString().slice(0, 16).replace(/[-T:]/g, "")
             : undefined;
-          // 有名字用版本名，未命名用 app 名+时间戳
-          const versionLabel = ver.marked_name ?? sanitize(app.name);
+          // 有名字用版本名，未命名用 app 名+时间戳（空字符串也算未命名）
+          const versionLabel = ver.marked_name?.trim() || sanitize(app.name);
+          // 将 {name}.yml 或 {name}_{date}.yml 替换为 {name}_versions/{label}_{date}.yml
+          // 避免 by-workspace 等含 {date} 的模式产生两个 {date} 占位符
           const resolvedPatternStr = resolvePattern(opts.pattern);
-          const versionPattern = resolvedPatternStr.replace(".yml", `_versions/${versionLabel}_{date}.yml`);
+          const versionPattern = resolvedPatternStr.replace(
+            /\{name\}(?:_\{date\})?\.yml$/,
+            `{name}_versions/${versionLabel}_{date}.yml`
+          );
           const verPath = buildFilePath(versionPattern, {
             ...ctx,
             date: verDate,
