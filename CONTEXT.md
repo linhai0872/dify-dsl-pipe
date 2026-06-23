@@ -38,6 +38,16 @@ _Avoid_: driver, connector, plugin
 导出文件的路径模板字符串，使用 `{name}`, `{type}`, `{tags}`, `{date}` 等变量。
 _Avoid_: template, format, schema
 
+### 内部架构
+
+**PipeRunner**:
+CLI / HTTP API / MCP 共用的编排层。负责加载配置、创建 Instance 连接、构建 Storage Backend。三个入口只做参数解析和结果展示，所有管道逻辑经由 PipeRunner 执行。
+_Avoid_: orchestrator, engine, core
+
+**PipeError**:
+带机器可解析 error code（`ERR_AUTH_FAILED`、`ERR_STORAGE_CONNECT_FAILED` 等）的错误类型。`--json` 模式下输出 `{success, error, code}` 结构，供 Skill 和 MCP 客户端解析和重试。
+_Avoid_: exception, fault
+
 ### 用户入口
 
 **Skill**:
@@ -56,6 +66,8 @@ _Avoid_: terminal, shell, command-line tool
 - **Adapter** 根据 **Instance** 的 Dify 版本自动选择
 - **Naming Pattern** 决定 **DSL** 写入 **Storage Backend** 时的路径结构
 - **Skill** 通过调用 **CLI** 驱动所有操作；**CLI** 是唯一的执行层
+- **PipeRunner** 是 CLI / HTTP API / MCP 三入口共用的编排 seam
+- **PipeError** 携带 error code，`--json` 模式下输出结构化错误供 agent 消费
 
 ## Example dialogue
 

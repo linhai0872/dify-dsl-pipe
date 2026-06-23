@@ -42,6 +42,9 @@ profiles:
       includeVersionHistory: true
       includeSecret: false
       incremental: false
+    import:
+      onConflict: "skip"    # skip | overwrite
+      dryRun: false
 
   prod-s3:
     instance: prod
@@ -74,6 +77,7 @@ defaults:
     onConflict: "skip"      # skip | overwrite
     dryRun: false
   notification:
+    enabled: false          # 全局开关，true 时才发送通知
     webhookUrl: ""          # Slack / 企业微信 / 钉钉 / 通用 HTTP POST
     onFailure: true
     onSuccess: false
@@ -100,8 +104,10 @@ defaults:
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | `instance` | ✅ | 引用 instances 中的 name |
+| `workspace` | — | 指定 Workspace ID |
 | `storage` | — | 存储配置（见下方） |
 | `export` | — | 导出默认选项 |
+| `import` | — | 导入默认选项（`onConflict`、`dryRun`） |
 
 ### storage（通用字段）
 

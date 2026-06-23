@@ -35,8 +35,9 @@ npx dify-dsl-pipe export [options]
 | `--include-secret` | `false` | 包含敏感信息（API Key 等） |
 | `--no-include-versions` | — | 不导出版本历史（默认导出，加此参数可加速） |
 | `--incremental` | `false` | 增量导出，只导出上次之后有变更的应用 |
-| `--archive <format>` | `none` | 打包格式：`none` / `zip` |
+| `--zip` | `false` | 打包为 ZIP 文件 |
 | `--workspace <id>` | — | 指定 Workspace ID |
+| `--all-workspaces` | `false` | 导出所有 Workspace（自动遍历，pattern 默认升级为 `by-workspace`） |
 | `--json` | `false` | JSON 格式输出，供程序解析 |
 | `--verbose` | `false` | 详细日志 |
 
@@ -92,6 +93,7 @@ npx dify-dsl-pipe import [options]
 | `--s3-region <region>` | `us-east-1` | S3 区域 |
 | `--s3-access-key <key>` | — | S3 Access Key ID |
 | `--s3-secret-key <key>` | — | S3 Secret Access Key |
+| `--s3-force-path-style` | `false` | 强制 Path Style（**MinIO 必须开启**） |
 | `--git-repo <path>` | — | Git 仓库路径或 URL |
 | `--git-branch <branch>` | `main` | Git 分支 |
 | `--on-conflict <strategy>` | `skip` | 冲突策略：`skip`（跳过）/ `overwrite`（覆盖） |
