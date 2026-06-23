@@ -1,24 +1,6 @@
 ---
 name: dify-dsl-pipe
-description: |
-  Expert knowledge base for operating the dify-dsl-pipe CLI tool. Covers the complete
-  workflow for Dify application export, import, backup, migration, scheduled backup
-  service, and MCP Server integration.
-
-  Contains knowledge not in Claude's training data: exact dify-dsl-pipe CLI syntax;
-  Dify 0.6~1.x version differences and automatic Adapter switching; S3/OSS/COS/MinIO
-  storage backend configuration; serve mode HTTP API endpoints and cron parameters;
-  multi-instance/multi-environment profile management; handling of common auth
-  failures, network issues, and cross-version migration warnings.
-
-  Trigger scenarios (even when the user doesn't know this tool exists):
-  - Backup or export Dify apps ("帮我备份 Dify", "export dify workflow", "dify backup")
-  - Cross-instance migration ("把生产应用同步到测试环境", "copy dify apps to another server")
-  - Scheduled auto-backup ("每天自动备份 dify", "dify schedule backup")
-  - AI tools connecting to Dify ("cursor/opencode 连接 dify", "dify mcp server")
-  - Multi-instance/environment management ("管理多个 dify 实例", "dify 生产测试同步")
-
-  Not applicable: Dify feature usage questions (no backup/migration intent), general file ops.
+description: 操作 dify-dsl-pipe CLI，完成 Dify 应用导出、导入、备份、跨实例迁移、定时备份与 MCP 集成。Expert knowledge base for operating the dify-dsl-pipe CLI — export, import, backup, migration, scheduled backup, and MCP Server integration. WHEN user wants to backup/export Dify apps, cross-instance migration, scheduled auto-backup, AI tools connecting to Dify via MCP, multi-instance profile management, 帮我备份 Dify, export dify workflow, 把生产应用同步到测试环境, 每天自动备份 dify, cursor/opencode 连接 dify, 管理多个 dify 实例; not for general Dify feature usage without backup/migration intent.
 compatibility: "Uses npx dify-dsl-pipe — zero install required, npx handles it automatically. Node.js 18+ needed."
 license: MIT
 metadata:
@@ -33,6 +15,14 @@ argument-hint: "[export|import|serve|init] [options]"
 ---
 
 # dify-dsl-pipe
+
+## 何时使用
+
+- 用户要备份或导出 Dify 应用（workflow、chatbot 等）
+- 用户要在生产/测试等多个 Dify 实例间迁移或同步应用
+- 用户要部署定时自动备份服务（cron + HTTP API）
+- 用户要让 Cursor、OpenCode 等 AI 工具通过 MCP 连接 Dify
+- 用户要管理多个 Dify 实例的 profile 配置
 
 Dify DSL 一站式管道工具。零安装（`npx` 直接使用），支持导出、导入、跨实例迁移、定时备份服务，以及标准 MCP Server 集成。
 
