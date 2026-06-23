@@ -1,9 +1,8 @@
 import type { Command } from "commander";
 import { serve } from "@hono/node-server";
-import { DifyClient } from "../core/client.js";
-import { loadConfig, resolveInstanceConfig } from "../config/loader.js";
-import { createStorage } from "../storage/factory.js";
-import { createApi, setWebhookUrl, stopAllJobs, type ServeContext } from "../serve/api.js";
+import { setupPipe } from "../core/runner.js";
+import { PipeError } from "../core/errors.js";
+import { createApi, setWebhookUrl, stopAllJobs, type ServeContext, type NotificationConfig } from "../serve/api.js";
 import { startMcpServer } from "../serve/mcp.js";
 import { log, setJsonMode, setLogLevel } from "../utils/logger.js";
 import pc from "picocolors";
@@ -28,9 +27,10 @@ export function registerServeCommand(program: Command) {
     .option("--s3-region <region>", "S3 区域", "us-east-1")
     .option("--s3-access-key <key>", "S3 Access Key ID")
     .option("--s3-secret-key <key>", "S3 Secret Access Key")
+    .option("--s3-force-path-style", "S3 强制 path-style（MinIO 必需）")
     .option("--git-repo <path>", "Git 仓库路径或 URL")
     .option("--git-branch <branch>", "Git 分支", "main")
-    .option("--pattern <pattern>", "文件命名模板", "by-type")
+    .option("--pattern <pattern>", "命名规则", "by-type")
     .option("--webhook <url>", "Webhook 通知地址")
     .option("--json", "JSON 格式输出")
     .option("--verbose", "详细日志")
@@ -39,84 +39,61 @@ export function registerServeCommand(program: Command) {
       if (opts.verbose) setLogLevel("debug");
 
       try {
-        const config = loadConfig(opts.config);
+        const ctx = await setupPipe({
+          url: opts.url,
+          token: opts.token,
+          email: opts.email,
+          password: opts.password,
+          profile: opts.profile,
+          configPath: opts.config,
+          storageType: opts.storage,
+          out: opts.out,
+          s3Bucket: opts.s3Bucket,
+          s3Endpoint: opts.s3Endpoint,
+          s3Region: opts.s3Region,
+          s3AccessKey: opts.s3AccessKey,
+          s3SecretKey: opts.s3SecretKey,
+          s3ForcePathStyle: opts.s3ForcePathStyle,
+          gitRepo: opts.gitRepo,
+          gitBranch: opts.gitBranch,
+        });
 
-        const clients = new Map<string, { client: DifyClient; name: string }>();
+        if (opts.pattern && opts.pattern !== "by-type") {
+          ctx.exportOpts.pattern = opts.pattern;
+        }
 
-        if (opts.url) {
-          const client = new DifyClient({
-            baseUrl: opts.url,
-            email: opts.email,
-            password: opts.password,
-            token: opts.token,
-            timeout: 30,
-            maxRetries: 3,
-          });
-          const info = await client.connect();
-          const name = "cli";
-          clients.set(name, { client, name });
-          log.success(`已连接 ${name}: Dify ${info.version} (${info.adapterType})`);
-        } else {
-          for (const inst of config.instances) {
-            try {
-              const client = new DifyClient({
-                baseUrl: inst.url,
-                email: inst.email,
-                password: inst.password,
-                token: inst.token,
-                timeout: inst.timeout ?? 30,
-                maxRetries: inst.maxRetries ?? 3,
-              });
-              const info = await client.connect();
-              clients.set(inst.name, { client, name: inst.name });
-              log.success(`已连接 ${inst.name}: Dify ${info.version} (${info.adapterType})`);
-            } catch (e) {
-              log.warn(`跳过 ${inst.name}: ${e instanceof Error ? e.message : e}`);
+        const notification: NotificationConfig | undefined = ctx.config.defaults?.notification?.enabled
+          ? {
+              enabled: true,
+              onFailure: ctx.config.defaults.notification.onFailure ?? true,
+              onSuccess: ctx.config.defaults.notification.onSuccess ?? false,
             }
-          }
-        }
+          : undefined;
 
-        if (clients.size === 0) {
-          log.error("没有可用的 Dify 实例连接");
-          process.exit(1);
-        }
-
-        const storageConfig = buildStorageFromFlags(opts);
-        const storage = createStorage(storageConfig);
-        if (!(await storage.testConnection())) {
-          log.error("存储后端连接失败");
-          process.exit(1);
-        }
-
-        const ctx: ServeContext = {
-          clients,
-          storage,
-          exportOpts: {
-            includeSecret: false,
-            includeVersionHistory: true,
-            incremental: false,
-            archive: "none",
-            pattern: opts.pattern,
-          },
+        const serveCtx: ServeContext = {
+          clients: ctx.clients,
+          storage: ctx.storage,
+          exportOpts: ctx.exportOpts,
+          importOpts: ctx.importOpts,
+          notification,
         };
 
-        if (opts.webhook) {
-          setWebhookUrl(opts.webhook);
+        const webhookFromConfig = ctx.config.defaults?.notification?.webhookUrl;
+        if (opts.webhook || webhookFromConfig) {
+          setWebhookUrl(opts.webhook ?? webhookFromConfig);
         }
 
         if (opts.mcp) {
-          // MCP 模式不输出到 stdout
           setLogLevel("silent");
           await startMcpServer({
-            clients,
-            storage,
+            clients: ctx.clients,
+            storage: ctx.storage,
             exportOpts: ctx.exportOpts,
           });
           return;
         }
 
-        // HTTP API 模式
-        const api = createApi(ctx);
+        const api = createApi(serveCtx);
         const port = parseInt(opts.port, 10);
         const host = opts.host;
 
@@ -134,7 +111,7 @@ export function registerServeCommand(program: Command) {
 
         serve({ fetch: api.fetch, port, hostname: host }, () => {
           log.success(`HTTP API 已启动: ${pc.bold(`http://${host}:${port}`)}`);
-          log.info(`已连接 ${clients.size} 个 Dify 实例`);
+          log.info(`已连接 ${ctx.clients.size} 个 Dify 实例`);
           log.info(`端点: POST /export, POST /import, GET /status, GET /jobs, POST /jobs`);
         });
       } catch (e) {
@@ -142,39 +119,4 @@ export function registerServeCommand(program: Command) {
         process.exit(1);
       }
     });
-}
-
-function buildStorageFromFlags(opts: Record<string, unknown>) {
-  const type = (opts.storage as string) ?? "local";
-
-  if (type === "s3") {
-    return {
-      type: "s3" as const,
-      bucket: (opts.s3Bucket as string) ?? "",
-      endpoint: opts.s3Endpoint as string | undefined,
-      region: (opts.s3Region as string) ?? "us-east-1",
-      accessKeyId: (opts.s3AccessKey as string) ?? process.env.AWS_ACCESS_KEY_ID ?? "",
-      secretAccessKey: (opts.s3SecretKey as string) ?? process.env.AWS_SECRET_ACCESS_KEY ?? "",
-      prefix: "",
-      forcePathStyle: false,
-    };
-  }
-
-  if (type === "git") {
-    return {
-      type: "git" as const,
-      repo: (opts.gitRepo as string) ?? ".",
-      branch: (opts.gitBranch as string) ?? "main",
-      path: ".",
-      commitMessage: "chore: dify dsl backup {date}",
-      authorName: "dify-dsl-pipe",
-      authorEmail: "dify-dsl-pipe@noreply",
-      push: true,
-    };
-  }
-
-  return {
-    type: "local" as const,
-    path: (opts.out as string) ?? "./dify-backup",
-  };
 }

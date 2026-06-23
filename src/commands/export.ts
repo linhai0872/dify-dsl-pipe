@@ -1,9 +1,7 @@
 import type { Command } from "commander";
-import { DifyClient } from "../core/client.js";
 import { exportApps } from "../core/exporter.js";
-import { loadConfig, resolveInstanceConfig } from "../config/loader.js";
-import { createStorage } from "../storage/factory.js";
-import type { ExportOptions } from "../config/types.js";
+import { setupPipe, type PipeContext } from "../core/runner.js";
+import { PipeError } from "../core/errors.js";
 import { log, formatDuration, setJsonMode, setLogLevel } from "../utils/logger.js";
 import pc from "picocolors";
 
@@ -24,16 +22,17 @@ export function registerExportCommand(program: Command) {
     .option("--s3-region <region>", "S3 区域", "us-east-1")
     .option("--s3-access-key <key>", "S3 Access Key ID")
     .option("--s3-secret-key <key>", "S3 Secret Access Key")
+    .option("--s3-force-path-style", "S3 强制 path-style（MinIO 必需）")
     .option("--git-repo <path>", "Git 仓库路径或 URL")
     .option("--git-branch <branch>", "Git 分支", "main")
-    .option("--pattern <pattern>", "文件命名模板", "by-type")
+    .option("--pattern <pattern>", "命名规则", "by-type")
     .option("--filter <expr>", "过滤表达式 (如 type:workflow,tag:核心,name:xxx)")
     .option("--include-secret", "包含敏感信息")
     .option("--no-include-secret", "不包含敏感信息（默认）")
     .option("--include-versions", "包含版本历史（默认）")
     .option("--no-include-versions", "不包含版本历史")
     .option("--incremental", "增量导出（只导出有更新的应用）")
-    .option("--archive <format>", "打包格式: none, zip", "none")
+    .option("--zip", "打包为 ZIP 文件")
     .option("--workspace <id>", "指定 Workspace ID")
     .option("--all-workspaces", "导出所有 Workspace（自动遍历）")
     .option("--json", "JSON 格式输出")
@@ -43,50 +42,44 @@ export function registerExportCommand(program: Command) {
       if (opts.verbose) setLogLevel("debug");
 
       try {
-        const config = loadConfig(opts.config);
-        const resolved = resolveInstanceConfig(config, opts);
-
-        // 构建存储配置
-        const storageConfig = resolved.storage ?? buildStorageFromFlags(opts);
-
-        // 连接 Dify
-        const client = new DifyClient({
-          baseUrl: resolved.instance.url,
-          email: resolved.instance.email,
-          password: resolved.instance.password,
-          token: resolved.instance.token,
-          timeout: resolved.instance.timeout,
-          maxRetries: resolved.instance.maxRetries,
+        const ctx = await setupPipe({
+          url: opts.url,
+          token: opts.token,
+          email: opts.email,
+          password: opts.password,
+          profile: opts.profile,
+          configPath: opts.config,
+          workspace: opts.allWorkspaces ? undefined : opts.workspace,
+          storageType: opts.storage,
+          out: opts.out,
+          s3Bucket: opts.s3Bucket,
+          s3Endpoint: opts.s3Endpoint,
+          s3Region: opts.s3Region,
+          s3AccessKey: opts.s3AccessKey,
+          s3SecretKey: opts.s3SecretKey,
+          s3ForcePathStyle: opts.s3ForcePathStyle,
+          gitRepo: opts.gitRepo,
+          gitBranch: opts.gitBranch,
         });
-
-        const info = await client.connect();
-        log.success(`已连接 Dify ${info.version} (${info.adapterType} adapter)`);
-
-        // 创建存储
-        const storage = createStorage(storageConfig);
-        if (!(await storage.testConnection())) {
-          log.error("存储后端连接失败");
-          process.exit(1);
-        }
 
         const filter = parseFilter(opts.filter);
         const baseExportOpts = {
-          includeSecret: opts.includeSecret ?? false,
-          includeVersionHistory: opts.includeVersions ?? true,
-          incremental: opts.incremental,
-          archive: opts.archive,
-          filter,
-          instanceName: resolved.instance.name,
+          ...ctx.exportOpts,
+          includeSecret: opts.includeSecret ?? ctx.exportOpts.includeSecret,
+          includeVersionHistory: opts.includeVersions ?? ctx.exportOpts.includeVersionHistory,
+          incremental: opts.incremental ?? ctx.exportOpts.incremental,
+          archive: opts.zip ? "zip" as const : ctx.exportOpts.archive,
+          filter: filter ?? ctx.exportOpts.filter,
+          instanceName: ctx.clients.values().next().value?.name,
         };
 
+        const { client } = ctx.clients.values().next().value!;
         let totalSuccess = 0;
         let totalFailed = 0;
         let totalDuration = 0;
         let hasError = false;
 
         if (opts.allWorkspaces) {
-          // --all-workspaces：遍历所有 workspace 逐一导出
-          // 未显式指定 pattern 时从 by-type 升级为 by-workspace，目录自动按 workspace 分组
           const pattern = opts.pattern !== "by-type" ? opts.pattern : "by-workspace";
           const workspaces = await client.getWorkspaces();
           log.info(`找到 ${workspaces.length} 个 Workspace`);
@@ -95,7 +88,7 @@ export function registerExportCommand(program: Command) {
             log.info(`\nWorkspace: ${pc.bold(ws.name)}`);
             try {
               await client.switchWorkspace(ws.id);
-              const result = await exportApps(client, storage, {
+              const result = await exportApps(client, ctx.storage, {
                 ...baseExportOpts,
                 pattern,
                 workspaceName: ws.name,
@@ -111,15 +104,9 @@ export function registerExportCommand(program: Command) {
             }
           }
         } else {
-          // 单 workspace 导出（默认行为）
-          if (opts.workspace ?? resolved.workspace) {
-            await client.switchWorkspace(opts.workspace ?? resolved.workspace!);
-            log.info(`已切换到 Workspace: ${opts.workspace ?? resolved.workspace}`);
-          }
-          const result = await exportApps(client, storage, {
+          const result = await exportApps(client, ctx.storage, {
             ...baseExportOpts,
-            pattern: opts.pattern,
-            workspaceName: opts.workspace ?? resolved.workspace,
+            pattern: opts.pattern !== "by-type" ? opts.pattern : ctx.exportOpts.pattern,
           });
           totalSuccess = result.success.length;
           totalFailed = result.failed.length;
@@ -127,7 +114,6 @@ export function registerExportCommand(program: Command) {
           hasError = result.failed.length > 0;
         }
 
-        // 输出结果
         if (opts.json) {
           console.log(JSON.stringify({
             success: !hasError,
@@ -146,46 +132,15 @@ export function registerExportCommand(program: Command) {
 
         process.exit(hasError ? 1 : 0);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        log.error(msg);
+        if (opts.json) {
+          const pe = e instanceof PipeError ? e.toJSON() : { success: false, error: e instanceof Error ? e.message : String(e) };
+          console.log(JSON.stringify(pe));
+        } else {
+          log.error(e instanceof Error ? e.message : String(e));
+        }
         process.exit(1);
       }
     });
-}
-
-function buildStorageFromFlags(opts: Record<string, unknown>) {
-  const type = (opts.storage as string) ?? "local";
-
-  if (type === "s3") {
-    return {
-      type: "s3" as const,
-      bucket: (opts.s3Bucket as string) ?? "",
-      endpoint: opts.s3Endpoint as string | undefined,
-      region: (opts.s3Region as string) ?? "us-east-1",
-      accessKeyId: (opts.s3AccessKey as string) ?? process.env.AWS_ACCESS_KEY_ID ?? "",
-      secretAccessKey: (opts.s3SecretKey as string) ?? process.env.AWS_SECRET_ACCESS_KEY ?? "",
-      prefix: "",
-      forcePathStyle: false,
-    };
-  }
-
-  if (type === "git") {
-    return {
-      type: "git" as const,
-      repo: (opts.gitRepo as string) ?? ".",
-      branch: (opts.gitBranch as string) ?? "main",
-      path: ".",
-      commitMessage: "chore: dify dsl backup {date}",
-      authorName: "dify-dsl-pipe",
-      authorEmail: "dify-dsl-pipe@noreply",
-      push: true,
-    };
-  }
-
-  return {
-    type: "local" as const,
-    path: (opts.out as string) ?? "./dify-backup",
-  };
 }
 
 function parseFilter(expr?: string) {

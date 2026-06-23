@@ -3,15 +3,23 @@ import { Cron } from "croner";
 import type { DifyClient } from "../core/client.js";
 import { exportApps } from "../core/exporter.js";
 import { importApps } from "../core/importer.js";
+import { getClient, type PipeContext } from "../core/runner.js";
 import type { StorageBackend } from "../storage/interface.js";
 import type { ExportOptions, ImportOptions } from "../config/types.js";
 import { log } from "../utils/logger.js";
+
+export interface NotificationConfig {
+  enabled: boolean;
+  onFailure: boolean;
+  onSuccess: boolean;
+}
 
 export interface ServeContext {
   clients: Map<string, { client: DifyClient; name: string }>;
   storage: StorageBackend;
   exportOpts: ExportOptions;
-  importOpts?: ImportOptions;
+  importOpts: ImportOptions;
+  notification?: NotificationConfig;
 }
 
 interface CronJob {
@@ -89,7 +97,7 @@ export function createApi(ctx: ServeContext) {
     }
 
     try {
-      const result = await importApps(entry.client, ctx.storage, ctx.importOpts ?? {});
+      const result = await importApps(entry.client, ctx.storage, ctx.importOpts);
       return c.json({
         success: true,
         created: result.created.length,
@@ -141,15 +149,24 @@ export function createApi(ctx: ServeContext) {
             instanceName: entry.name,
           });
           job.lastResult = { success: result.success.length, failed: result.failed.length };
-          await sendWebhook(ctx, `导出完成: ${result.success.length} 成功, ${result.failed.length} 失败`);
+          const hasFailed = result.failed.length > 0;
+          if (shouldNotify(ctx, hasFailed)) {
+            await sendWebhook(ctx, `导出完成: ${result.success.length} 成功, ${result.failed.length} 失败`);
+          }
         } else {
-          const result = await importApps(entry.client, ctx.storage, ctx.importOpts ?? {});
+          const result = await importApps(entry.client, ctx.storage, ctx.importOpts);
           job.lastResult = { success: result.created.length, failed: result.failed.length };
-          await sendWebhook(ctx, `导入完成: ${result.created.length} 创建, ${result.failed.length} 失败`);
+          const hasFailed = result.failed.length > 0;
+          if (shouldNotify(ctx, hasFailed)) {
+            await sendWebhook(ctx, `导入完成: ${result.created.length} 创建, ${result.failed.length} 失败`);
+          }
         }
       } catch (e) {
         job.lastResult = { success: 0, failed: -1 };
         log.error(`[cron] ${id} failed: ${e instanceof Error ? e.message : e}`);
+        if (shouldNotify(ctx, true)) {
+          await sendWebhook(ctx, `任务失败: ${e instanceof Error ? e.message : e}`);
+        }
       }
       job.lastRun = new Date().toISOString();
     });
@@ -175,7 +192,14 @@ export function setWebhookUrl(url: string | undefined) {
   webhookUrl = url;
 }
 
-async function sendWebhook(ctx: ServeContext, message: string) {
+function shouldNotify(ctx: ServeContext, hasFailed: boolean): boolean {
+  const n = ctx.notification;
+  if (!n || !n.enabled) return !!webhookUrl;
+  if (hasFailed) return n.onFailure;
+  return n.onSuccess;
+}
+
+async function sendWebhook(_ctx: ServeContext, message: string) {
   if (!webhookUrl) return;
   try {
     await fetch(webhookUrl, {

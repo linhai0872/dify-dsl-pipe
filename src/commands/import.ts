@@ -1,7 +1,7 @@
 import type { Command } from "commander";
-import { DifyClient } from "../core/client.js";
 import { importApps } from "../core/importer.js";
-import { loadConfig, resolveInstanceConfig } from "../config/loader.js";
+import { setupPipe, storageFromFlags } from "../core/runner.js";
+import { PipeError } from "../core/errors.js";
 import { createStorage } from "../storage/factory.js";
 import { log, formatDuration, setJsonMode, setLogLevel } from "../utils/logger.js";
 import pc from "picocolors";
@@ -23,6 +23,7 @@ export function registerImportCommand(program: Command) {
     .option("--s3-region <region>", "S3 区域", "us-east-1")
     .option("--s3-access-key <key>", "S3 Access Key ID")
     .option("--s3-secret-key <key>", "S3 Secret Access Key")
+    .option("--s3-force-path-style", "S3 强制 path-style（MinIO 必需）")
     .option("--git-repo <path>", "Git 仓库路径或 URL")
     .option("--git-branch <branch>", "Git 分支", "main")
     .option("--on-conflict <strategy>", "冲突策略: skip, overwrite", "skip")
@@ -35,43 +36,45 @@ export function registerImportCommand(program: Command) {
       if (opts.verbose) setLogLevel("debug");
 
       try {
-        const config = loadConfig(opts.config);
-        const resolved = resolveInstanceConfig(config, opts);
-
-        // 连接目标 Dify
-        const client = new DifyClient({
-          baseUrl: resolved.instance.url,
-          email: resolved.instance.email,
-          password: resolved.instance.password,
-          token: resolved.instance.token,
-          timeout: resolved.instance.timeout,
-          maxRetries: resolved.instance.maxRetries,
+        const ctx = await setupPipe({
+          url: opts.url,
+          token: opts.token,
+          email: opts.email,
+          password: opts.password,
+          profile: opts.profile,
+          configPath: opts.config,
+          workspace: opts.workspace,
+          // import 不传 storage flags — setupPipe 用于连接目标 Instance
+          // 源 storage 由 CLI flags 单独决定
         });
 
-        const info = await client.connect();
-        log.success(`已连接目标 Dify ${info.version} (${info.adapterType} adapter)`);
+        // 源存储：profile storage 优先（备份在同一存储里），否则按 CLI flags 构建
+        const sourceStorageConfig = ctx.config.defaults?.storage ?? storageFromFlags({
+          storageType: opts.storage,
+          out: opts.source,
+          s3Bucket: opts.s3Bucket,
+          s3Endpoint: opts.s3Endpoint,
+          s3Region: opts.s3Region,
+          s3AccessKey: opts.s3AccessKey,
+          s3SecretKey: opts.s3SecretKey,
+          s3ForcePathStyle: opts.s3ForcePathStyle,
+          gitRepo: opts.gitRepo,
+          gitBranch: opts.gitBranch,
+        });
 
-        if (opts.workspace ?? resolved.workspace) {
-          await client.switchWorkspace(opts.workspace ?? resolved.workspace!);
-          log.info(`已切换到 Workspace: ${opts.workspace ?? resolved.workspace}`);
+        const sourceStorage = createStorage(sourceStorageConfig);
+        if (!(await sourceStorage.testConnection())) {
+          throw new PipeError("ERR_STORAGE_CONNECT_FAILED", "源存储连接失败");
         }
 
-        // 创建源存储
-        const storageConfig = buildSourceStorage(opts);
-        const storage = createStorage(storageConfig);
-        if (!(await storage.testConnection())) {
-          log.error("源存储连接失败");
-          process.exit(1);
-        }
+        const { client } = ctx.clients.values().next().value!;
 
-        // 执行导入
-        const result = await importApps(client, storage, {
-          dryRun: opts.dryRun,
-          onConflict: opts.onConflict,
+        const result = await importApps(client, sourceStorage, {
+          dryRun: opts.dryRun ?? ctx.importOpts.dryRun,
+          onConflict: opts.onConflict !== "skip" ? opts.onConflict : ctx.importOpts.onConflict,
           source: opts.source !== "./dify-backup" ? opts.source : undefined,
         });
 
-        // 输出结果
         if (opts.json) {
           console.log(JSON.stringify({
             success: true,
@@ -107,44 +110,13 @@ export function registerImportCommand(program: Command) {
 
         process.exit(result.failed.length > 0 ? 1 : 0);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        log.error(msg);
+        if (opts.json) {
+          const pe = e instanceof PipeError ? e.toJSON() : { success: false, error: e instanceof Error ? e.message : String(e) };
+          console.log(JSON.stringify(pe));
+        } else {
+          log.error(e instanceof Error ? e.message : String(e));
+        }
         process.exit(1);
       }
     });
-}
-
-function buildSourceStorage(opts: Record<string, unknown>) {
-  const type = (opts.storage as string) ?? "local";
-
-  if (type === "s3") {
-    return {
-      type: "s3" as const,
-      bucket: (opts.s3Bucket as string) ?? "",
-      endpoint: opts.s3Endpoint as string | undefined,
-      region: (opts.s3Region as string) ?? "us-east-1",
-      accessKeyId: (opts.s3AccessKey as string) ?? process.env.AWS_ACCESS_KEY_ID ?? "",
-      secretAccessKey: (opts.s3SecretKey as string) ?? process.env.AWS_SECRET_ACCESS_KEY ?? "",
-      prefix: "",
-      forcePathStyle: false,
-    };
-  }
-
-  if (type === "git") {
-    return {
-      type: "git" as const,
-      repo: (opts.gitRepo as string) ?? ".",
-      branch: (opts.gitBranch as string) ?? "main",
-      path: ".",
-      commitMessage: "",
-      authorName: "",
-      authorEmail: "",
-      push: false,
-    };
-  }
-
-  return {
-    type: "local" as const,
-    path: (opts.source as string) ?? "./dify-backup",
-  };
 }

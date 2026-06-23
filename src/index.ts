@@ -4,13 +4,14 @@ import { registerImportCommand } from "./commands/import.js";
 import { registerInitCommand } from "./commands/init.js";
 import { registerServeCommand } from "./commands/serve.js";
 import { listPresets } from "./utils/naming.js";
+import { VERSION } from "./version.js";
 
 const program = new Command();
 
 program
   .name("dify-dsl-pipe")
   .description("Dify DSL 一站式管道工具 — 导出、导入、跨实例迁移")
-  .version("0.1.0");
+  .version(VERSION);
 
 registerExportCommand(program);
 registerImportCommand(program);
@@ -25,8 +26,8 @@ program
     for (const p of listPresets()) {
       console.log(`  ${p.name.padEnd(15)} ${p.pattern}`);
     }
-    console.log("\n使用 --pattern <预设名或自定义模板> 指定命名方式");
-    console.log("模板变量: {name}, {type}, {tags}, {date}, {id}, {instance}, {workspace}, {version}\n");
+    console.log("\n使用 --pattern <预设名或自定义规则> 指定命名方式");
+    console.log("变量: {name}, {type}, {tags}, {date}, {id}, {instance}, {workspace}, {version}\n");
   });
 
 program.parse();

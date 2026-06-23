@@ -12,6 +12,7 @@
     "skills"
   ],
   "scripts": {
+    "prepare": "lefthook install",
     "build": "tsup",
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
@@ -39,6 +40,7 @@
     "@clack/prompts": "^0.9.0",
     "@hono/node-server": "^2.0.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "archiver": "^8.0.0",
     "commander": "^13.0.0",
     "croner": "^10.0.1",
     "hono": "^4.12.18",
@@ -49,8 +51,10 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@types/archiver": "^8.0.0",
     "@types/node": "^22.0.0",
     "@types/semver": "^7.5.0",
+    "lefthook": "^2.1.9",
     "tsup": "^8.3.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"

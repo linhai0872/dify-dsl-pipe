@@ -1,4 +1,5 @@
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { PassThrough } from "node:stream";
+import { createRequire } from "node:module";
 import type { DifyClient } from "./client.js";
 import type { DifyApp, AppFilter, ExportResult, ExportedApp, PipeState } from "./types.js";
 import type { StorageBackend } from "../storage/interface.js";
@@ -78,6 +79,15 @@ export async function exportApps(
     await saveState(storage, state);
   }
 
+  // ZIP 打包
+  if (opts.archive === "zip" && success.length > 0) {
+    const zipPath = `dify-backup_${new Date().toISOString().slice(0, 10)}.zip`;
+    log.info(`打包为 ${zipPath}...`);
+    const zipBuffer = await createZipBuffer(success);
+    await storage.write(zipPath, zipBuffer.toString("base64"));
+    log.success(`ZIP 已写入: ${zipPath} (${formatSize(zipBuffer.length)})`);
+  }
+
   // finalize 存储（git commit 等）
   if (storage.finalize) {
     await storage.finalize();
@@ -85,6 +95,33 @@ export async function exportApps(
 
   const duration = Date.now() - start;
   return { success, failed, totalApps: apps.length, duration };
+}
+
+async function createZipBuffer(exported: ExportedApp[]): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const passthrough = new PassThrough();
+    passthrough.on("data", (chunk: Buffer) => chunks.push(chunk));
+    passthrough.on("end", () => resolve(Buffer.concat(chunks)));
+    passthrough.on("error", reject);
+
+    const _require = createRequire(import.meta.url);
+    const archiverFactory = _require("archiver") as (format: string, opts?: Record<string, unknown>) => import("stream").Transform & { append(data: string, opts: { name: string }): void; finalize(): Promise<void> };
+    const archive = archiverFactory("zip", { zlib: { level: 9 } });
+    archive.on("error", reject);
+    archive.pipe(passthrough);
+
+    for (const exp of exported) {
+      archive.append(exp.dslContent, { name: exp.filePath });
+      if (exp.versions) {
+        for (const ver of exp.versions) {
+          archive.append(ver.dslContent, { name: ver.filePath });
+        }
+      }
+    }
+
+    archive.finalize();
+  });
 }
 
 async function exportSingleApp(

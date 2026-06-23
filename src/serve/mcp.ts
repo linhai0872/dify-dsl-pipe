@@ -6,6 +6,7 @@ import { exportApps } from "../core/exporter.js";
 import { importApps } from "../core/importer.js";
 import type { StorageBackend } from "../storage/interface.js";
 import type { ExportOptions } from "../config/types.js";
+import { VERSION } from "../version.js";
 
 interface McpContext {
   clients: Map<string, { client: DifyClient; name: string }>;
@@ -16,7 +17,7 @@ interface McpContext {
 export async function startMcpServer(ctx: McpContext) {
   const server = new McpServer({
     name: "dify-dsl-pipe",
-    version: "0.2.0",
+    version: VERSION,
   });
 
   server.tool(
