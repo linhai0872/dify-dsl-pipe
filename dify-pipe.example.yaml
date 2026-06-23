@@ -29,6 +29,9 @@ profiles:
     export:
       pattern: "by-type"
       includeVersionHistory: true
+    import:
+      onConflict: "skip"
+      dryRun: false
 
   prod-s3:
     instance: prod

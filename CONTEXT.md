@@ -51,7 +51,7 @@ _Avoid_: exception, fault
 ### 用户入口
 
 **Skill**:
-Claude Code 的 agent 交互层。用户用自然语言描述需求，Skill 翻译为 CLI 命令执行。是产品的"第一入口"，降低认知负担。
+AI 工具（Claude Code、Cursor、OpenCode 等）的 agent 交互层。用户用自然语言描述需求，Skill 翻译为 CLI 命令执行。是产品的"第一入口"，降低认知负担。
 _Avoid_: prompt, instruction, agent
 
 **CLI**:
