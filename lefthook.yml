@@ -1,0 +1,15 @@
+min_version: 2.0.0
+
+pre-commit:
+  parallel: true
+  commands:
+    typecheck:
+      glob: "*.{ts,tsx}"
+      run: npx tsc --noEmit
+
+pre-push:
+  parallel: true
+  commands:
+    build:
+      glob: "*.{ts,tsx}"
+      run: npm run build
