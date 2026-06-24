@@ -1,7 +1,7 @@
 ---
 name: dify-dsl-pipe
 description: 操作 dify-dsl-pipe CLI，完成 Dify 应用导出、导入、备份、跨实例迁移、定时备份与 MCP 集成。Expert knowledge base for operating the dify-dsl-pipe CLI — export, import, backup, migration, scheduled backup, and MCP Server integration. WHEN user wants to backup/export Dify apps, cross-instance migration, scheduled auto-backup, AI tools connecting to Dify via MCP, multi-instance profile management, 帮我备份 Dify, export dify workflow, 把生产应用同步到测试环境, 每天自动备份 dify, cursor/opencode 连接 dify, 管理多个 dify 实例; not for general Dify feature usage without backup/migration intent.
-compatibility: "Uses npx dify-dsl-pipe — zero install required, npx handles it automatically. Node.js 18+ needed."
+compatibility: "Uses npx dify-dsl-pipe — zero install required, npx handles it automatically. Node.js 20+ needed."
 license: MIT
 metadata:
   author: linhai0872
