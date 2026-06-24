@@ -111,7 +111,7 @@ export class ModernAdapter implements DifyAdapter {
 
   async importAppDSL(dslContent: string, opts?: { name?: string; appId?: string }) {
     const payload: Record<string, unknown> = {
-      mode: "YAML_CONTENT",
+      mode: "yaml-content",
       yaml_content: dslContent,
     };
     if (opts?.name) payload.name = opts.name;
@@ -125,7 +125,7 @@ export class ModernAdapter implements DifyAdapter {
     };
 
     // 如果状态是 PENDING，需要 confirm
-    if (body.status === "PENDING" && body.id) {
+    if (String(body.status ?? "").toLowerCase() === "pending" && body.id) {
       const confirmRes = await this.http.post(`/apps/imports/${body.id}/confirm`);
       const confirmBody = confirmRes.body as { app_id?: string; status?: string };
       return {
