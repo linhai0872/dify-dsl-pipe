@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { importApps } from "../core/importer.js";
+import { importApps, resolveImportPrefix, DEFAULT_SOURCE } from "../core/importer.js";
 import { setupPipe, storageFromFlags } from "../core/runner.js";
 import { PipeError } from "../core/errors.js";
 import { createStorage } from "../storage/factory.js";
@@ -16,7 +16,7 @@ export function registerImportCommand(program: Command) {
     .option("--password <password>", "登录密码")
     .option("--profile <name>", "使用配置文件中的 profile")
     .option("-c, --config <path>", "配置文件路径")
-    .option("-s, --source <path>", "DSL 源目录或前缀", "./dify-backup")
+    .option("-s, --source <path>", "DSL 源目录或前缀", DEFAULT_SOURCE)
     .option("--storage <type>", "源存储类型: local, s3, git", "local")
     .option("--s3-bucket <bucket>", "S3 Bucket")
     .option("--s3-endpoint <endpoint>", "S3 端点")
@@ -49,7 +49,8 @@ export function registerImportCommand(program: Command) {
         });
 
         // 源存储：profile storage 优先（备份在同一存储里），否则按 CLI flags 构建
-        const sourceStorageConfig = ctx.config.defaults?.storage ?? storageFromFlags({
+        const profileStorage = ctx.config.defaults?.storage;
+        const sourceStorageConfig = profileStorage ?? storageFromFlags({
           storageType: opts.storage,
           out: opts.source,
           s3Bucket: opts.s3Bucket,
@@ -72,7 +73,11 @@ export function registerImportCommand(program: Command) {
         const result = await importApps(client, sourceStorage, {
           dryRun: opts.dryRun ?? ctx.importOpts.dryRun,
           onConflict: opts.onConflict !== "skip" ? opts.onConflict : ctx.importOpts.onConflict,
-          source: opts.source !== "./dify-backup" ? opts.source : undefined,
+          source: resolveImportPrefix({
+            storageType: sourceStorageConfig.type,
+            source: opts.source,
+            fromConfig: !!profileStorage,
+          }),
         });
 
         if (opts.json) {

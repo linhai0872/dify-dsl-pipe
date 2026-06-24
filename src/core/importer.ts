@@ -5,6 +5,27 @@ import type { ImportResult, ImportItem, DifyApp } from "./types.js";
 import type { ImportOptions } from "../config/types.js";
 import { log, formatDuration } from "../utils/logger.js";
 
+export const DEFAULT_SOURCE = "./dify-backup";
+
+/**
+ * 决定传给 importApps 的 list 前缀。
+ * 关键在于 source 此刻代表"storage 根目录"还是"根目录下的子前缀"：
+ * - local 且 storage 由 --source 即时构建（fromConfig=false）：source 已是 storage 根，
+ *   再当前缀会重复拼接，返回 undefined。
+ * - 其余情况（s3/git，或 storage 来自 config）：source 是根之下的 list 前缀
+ *   （s3 object key / 子目录），非默认值时保留。
+ */
+export function resolveImportPrefix(args: {
+  storageType: string;
+  source: string;
+  fromConfig: boolean;
+  defaultSource?: string;
+}): string | undefined {
+  const { storageType, source, fromConfig, defaultSource = DEFAULT_SOURCE } = args;
+  if (storageType === "local" && !fromConfig) return undefined;
+  return source !== defaultSource ? source : undefined;
+}
+
 export async function importApps(
   client: DifyClient,
   storage: StorageBackend,
