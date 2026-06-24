@@ -28,14 +28,14 @@ export function buildFilePath(pattern: string, ctx: NamingContext): string {
   const safeName = sanitize(ctx.app.name);
 
   let path = resolved
-    .replace("{name}", safeName)
-    .replace("{type}", ctx.app.mode)
-    .replace("{tags}", sanitize(tags))
-    .replace("{date}", date)
-    .replace("{id}", ctx.app.id.slice(0, 8))
-    .replace("{instance}", sanitize(ctx.instance ?? "default"))
-    .replace("{workspace}", sanitize(ctx.workspace ?? "default"))
-    .replace("{version}", sanitize(ctx.version ?? "current"));
+    .replaceAll("{name}", safeName)
+    .replaceAll("{type}", ctx.app.mode)
+    .replaceAll("{tags}", sanitize(tags))
+    .replaceAll("{date}", date)
+    .replaceAll("{id}", ctx.app.id.slice(0, 8))
+    .replaceAll("{instance}", sanitize(ctx.instance ?? "default"))
+    .replaceAll("{workspace}", sanitize(ctx.workspace ?? "default"))
+    .replaceAll("{version}", sanitize(ctx.version ?? "current"));
 
   // 清理多余的斜杠
   path = path.replace(/\/+/g, "/").replace(/^\//, "");
