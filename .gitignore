@@ -1,4 +1,9 @@
 docs/internal/
+
+# docstrata 对内规划（本地用，不提交）
+docs/prd.md
+docs/requirements.md
+docs/INDEX.md
 node_modules/
 dist/
 skill-workspace/
