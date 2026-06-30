@@ -34,9 +34,12 @@
 | `--no-include-versions` | — | 不包含版本历史（加速导出） |
 | `--incremental` | `false` | 增量导出（只导出有变更的应用） |
 | `--zip` | `false` | 打包为 ZIP 文件 |
+| `--no-sanitize` | — | 关闭导出清洗（默认开启：去掉跨 workspace 无效的 local 文件 default） |
+| `--preserve-local-files` | `false` | 保留 tenant-local 文件 default（同 Instance 完整还原场景） |
+| `--keep-original` | `false` | 被清洗时额外写 `.orig` 原件 |
 | `--workspace <id>` | — | 指定 Workspace ID |
 | `--all-workspaces` | `false` | 导出所有 Workspace（自动遍历，pattern 默认升级为 `by-workspace`） |
-| `--json` | `false` | JSON 格式输出（供程序解析） |
+| `--json` | `false` | JSON 格式输出（PipeReport 信封：`{command,success,summary,items[]}`） |
 | `--verbose` | `false` | 详细日志 |
 
 ---
@@ -65,8 +68,10 @@
 | `--git-branch <branch>` | `main` | Git 分支 |
 | `--on-conflict <strategy>` | `skip` | 冲突策略：`skip`（跳过）/ `overwrite`（覆盖） |
 | `--dry-run` | `false` | 预览模式，不实际导入 |
+| `--fix` | `false` | 自动修复预检 blocking 问题（删 local 文件 default、非法变量 id 换 UUID） |
+| `--target-dify-version <ver>` | 探测值 | 目标 Dify 版本，用于 DSL schema 兼容 warning |
 | `--workspace <id>` | — | 指定 Workspace ID |
-| `--json` | `false` | JSON 格式输出 |
+| `--json` | `false` | JSON 格式输出（PipeReport 信封：`{command,success,summary,items[]}`） |
 | `--verbose` | `false` | 详细日志 |
 
 ---
@@ -113,7 +118,7 @@
 | `list_instances` | 列出已连接的 Dify 实例 |
 | `list_apps` | 列出指定实例的所有应用 |
 | `export_apps` | 导出应用 DSL（支持 filter、incremental） |
-| `import_apps` | 导入 DSL（支持 onConflict、dryRun） |
+| `import_apps` | 导入 DSL（支持 onConflict、dryRun、fix） |
 
 ---
 
