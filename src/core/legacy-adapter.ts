@@ -77,6 +77,11 @@ export class LegacyAdapter implements DifyAdapter {
     return { appId: body.app_id ?? "", status: "completed" };
   }
 
+  /** Legacy 无 check-dependencies 端点。 */
+  async checkImportDependencies(_importId: string): Promise<{ leaked: unknown[] }> {
+    return { leaked: [] };
+  }
+
   async getWorkflowVersions(appId: string): Promise<WorkflowVersion[]> {
     try {
       const res = await this.http.get(`/apps/${appId}/workflows`, {

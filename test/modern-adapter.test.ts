@@ -54,7 +54,7 @@ describe("ModernAdapter.importAppDSL", () => {
     const adapter = newAdapter();
     const result = await adapter.importAppDSL("dsl-yaml", { name: "foo" });
 
-    expect(result).toEqual({ appId: "app1", status: "completed" });
+    expect(result).toEqual({ appId: "app1", status: "completed", importId: "imp1" });
 
     const confirmCalled = fetchMock.mock.calls.some(([url]) =>
       String(url).includes("/apps/imports/imp1/confirm"),
@@ -73,5 +73,27 @@ describe("ModernAdapter.importAppDSL", () => {
 
     expect(result.appId).toBe("app2");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ModernAdapter.checkImportDependencies", () => {
+  it("GET /apps/imports/{id}/check-dependencies returns leaked_dependencies", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ leaked_dependencies: [{ name: "p" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = newAdapter();
+    const result = await adapter.checkImportDependencies("imp1");
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/apps/imports/imp1/check-dependencies");
+    expect(result.leaked).toEqual([{ name: "p" }]);
+  });
+
+  it("returns empty leaked on missing endpoint (old version)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+    const adapter = newAdapter();
+    const result = await adapter.checkImportDependencies("imp1");
+    expect(result.leaked).toEqual([]);
   });
 });

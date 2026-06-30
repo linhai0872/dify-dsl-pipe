@@ -106,8 +106,9 @@ export async function startMcpServer(ctx: McpContext) {
       instance: z.string().optional().describe("Instance ID (defaults to first)"),
       onConflict: z.enum(["skip", "overwrite"]).optional().describe("Conflict strategy"),
       dryRun: z.boolean().optional().describe("Preview without importing"),
+      fix: z.boolean().optional().describe("Auto-fix blocking preflight issues (drop local file defaults, regen non-UUID variable ids)"),
     },
-    async ({ instance, onConflict, dryRun }) => {
+    async ({ instance, onConflict, dryRun, fix }) => {
       const entry = instance
         ? ctx.clients.get(instance)
         : ctx.clients.values().next().value;
@@ -119,8 +120,12 @@ export async function startMcpServer(ctx: McpContext) {
       const result = await importApps(entry.client, ctx.storage, {
         onConflict: onConflict ?? "skip",
         dryRun: dryRun ?? false,
+        fix: fix ?? false,
+        targetDifyVersion: entry.client.getInfo().version,
       });
 
+      const blocking = result.issues.filter((i) => i.severity === "blocking").length;
+      const warnings = result.issues.filter((i) => i.severity === "warning").length;
       return {
         content: [{
           type: "text",
@@ -130,6 +135,9 @@ export async function startMcpServer(ctx: McpContext) {
             skipped: result.skipped.length,
             overwritten: result.overwritten.length,
             failed: result.failed.length,
+            blocking,
+            warnings,
+            issues: result.issues,
             duration: result.duration,
           }, null, 2),
         }],

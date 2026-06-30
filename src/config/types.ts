@@ -56,6 +56,9 @@ export const ExportOptionsSchema = z.object({
   incremental: z.boolean().default(false),
   archive: z.enum(["none", "zip"]).default("none"),
   pattern: z.string().default("{type}/{name}_{date}.yml"),
+  sanitize: z.boolean().default(true),
+  preserveLocalFiles: z.boolean().default(false),
+  keepOriginal: z.boolean().default(false),
   filter: z
     .object({
       names: z.array(z.string()).optional(),
@@ -68,6 +71,8 @@ export const ExportOptionsSchema = z.object({
 export const ImportOptionsSchema = z.object({
   dryRun: z.boolean().default(false),
   onConflict: z.enum(["skip", "overwrite"]).default("skip"),
+  fix: z.boolean().default(false),
+  targetDifyVersion: z.string().optional(),
 });
 
 export const NotificationSchema = z.object({

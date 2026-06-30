@@ -1,3 +1,5 @@
+import type { RuleIssue } from "./report.js";
+
 export interface DifyApp {
   id: string;
   name: string;
@@ -46,6 +48,8 @@ export interface ExportedApp {
   dslContent: string;
   filePath: string;
   versions?: ExportedVersion[];
+  /** export sanitize 产出的 info 级 issue（被清洗项）。 */
+  issues?: RuleIssue[];
 }
 
 export interface ExportedVersion {
@@ -74,6 +78,8 @@ export interface ImportResult {
   skipped: { name: string; reason: string }[];
   overwritten: { name: string; appId: string }[];
   failed: { name: string; error: string }[];
+  /** 预检 + check-dependencies 产出的 issue（blocking/warning/info）。 */
+  issues: RuleIssue[];
   duration: number;
 }
 

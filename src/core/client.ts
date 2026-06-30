@@ -147,6 +147,10 @@ export class DifyClient {
     return this.adapter.importAppDSL(dslContent, opts);
   }
 
+  async checkImportDependencies(importId: string): Promise<{ leaked: unknown[] }> {
+    return this.adapter.checkImportDependencies(importId);
+  }
+
   async getWorkflowVersions(appId: string): Promise<WorkflowVersion[]> {
     return this.adapter.getWorkflowVersions(appId);
   }

@@ -2,10 +2,24 @@ import { PassThrough } from "node:stream";
 import { createRequire } from "node:module";
 import type { DifyClient } from "./client.js";
 import type { DifyApp, AppFilter, ExportResult, ExportedApp, PipeState } from "./types.js";
+import type { RuleIssue } from "./report.js";
 import type { StorageBackend } from "../storage/interface.js";
 import type { ExportOptions } from "../config/types.js";
 import { buildFilePath, sanitize, resolvePattern } from "../utils/naming.js";
+import { sanitizeExportDSL } from "./dsl-rules.js";
 import { log, formatDuration, formatSize } from "../utils/logger.js";
+
+/** 按 export opts 决定是否清洗 DSL；返回最终内容与清洗 info issues。 */
+function applySanitize(
+  dsl: string,
+  app: string,
+  file: string,
+  opts: ExportOptions
+): { dsl: string; issues: RuleIssue[] } {
+  if (!opts.sanitize) return { dsl, issues: [] };
+  const r = sanitizeExportDSL(dsl, { app, file }, { preserveLocalFiles: opts.preserveLocalFiles });
+  return { dsl: r.dsl, issues: r.issues };
+}
 
 export async function exportApps(
   client: DifyClient,
@@ -139,11 +153,15 @@ async function exportSingleApp(
   };
 
   // 导出当前版本
-  const dslContent = await client.exportAppDSL(app.id, opts.includeSecret);
+  const rawDsl = await client.exportAppDSL(app.id, opts.includeSecret);
   const filePath = buildFilePath(opts.pattern, { ...ctx, version: "current" });
-  await storage.write(filePath, dslContent);
+  const { dsl: curDsl, issues: curIssues } = applySanitize(rawDsl, app.name, filePath, opts);
+  if (opts.keepOriginal && curIssues.length) {
+    await storage.write(`${filePath}.orig`, rawDsl);
+  }
+  await storage.write(filePath, curDsl);
 
-  const exported: ExportedApp = { app, dslContent, filePath };
+  const exported: ExportedApp = { app, dslContent: curDsl, filePath, issues: curIssues };
 
   // 导出版本历史
   if (opts.includeVersionHistory && ["workflow", "advanced-chat"].includes(app.mode)) {
@@ -154,7 +172,7 @@ async function exportSingleApp(
         if ((ver.marked_name ?? ver.version ?? "").toLowerCase() === "draft") continue;
 
         try {
-          const verDsl = await client.exportAppDSL(app.id, opts.includeSecret, ver.id);
+          const rawVerDsl = await client.exportAppDSL(app.id, opts.includeSecret, ver.id);
           const rawDate = ver.created_at;
           const verDate = rawDate
             ? new Date(typeof rawDate === "number" ? rawDate * 1000 : rawDate)
@@ -178,7 +196,12 @@ async function exportSingleApp(
             const mainPath = buildFilePath(opts.pattern, { ...ctx, version: "current" });
             verPath = mainPath.replace(/\.yml$/, `_versions/${versionLabel}_${verDate ?? "unknown"}.yml`);
           }
+          const { dsl: verDsl, issues: verIssues } = applySanitize(rawVerDsl, app.name, verPath, opts);
+          if (opts.keepOriginal && verIssues.length) {
+            await storage.write(`${verPath}.orig`, rawVerDsl);
+          }
           await storage.write(verPath, verDsl);
+          if (verIssues.length) (exported.issues ??= []).push(...verIssues);
           exported.versions.push({ version: ver, dslContent: verDsl, filePath: verPath });
         } catch {
           log.debug(`  跳过版本 ${ver.marked_name ?? ver.id.slice(0, 8)}: 导出失败`);

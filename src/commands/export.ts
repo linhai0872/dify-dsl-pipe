@@ -2,6 +2,8 @@ import type { Command } from "commander";
 import { exportApps } from "../core/exporter.js";
 import { setupPipe, type PipeContext } from "../core/runner.js";
 import { PipeError } from "../core/errors.js";
+import { buildReport } from "../core/dsl-rules.js";
+import type { RuleIssue } from "../core/report.js";
 import { log, formatDuration, setJsonMode, setLogLevel } from "../utils/logger.js";
 import pc from "picocolors";
 
@@ -33,6 +35,9 @@ export function registerExportCommand(program: Command) {
     .option("--no-include-versions", "不包含版本历史")
     .option("--incremental", "增量导出（只导出有更新的应用）")
     .option("--zip", "打包为 ZIP 文件")
+    .option("--no-sanitize", "关闭导出清洗（默认开启：去跨 workspace 无效的 local 文件 default）")
+    .option("--preserve-local-files", "保留 tenant-local 文件 default（同 Instance 还原场景）")
+    .option("--keep-original", "被清洗时额外写 .orig 原件")
     .option("--workspace <id>", "指定 Workspace ID")
     .option("--all-workspaces", "导出所有 Workspace（自动遍历）")
     .option("--json", "JSON 格式输出")
@@ -69,6 +74,9 @@ export function registerExportCommand(program: Command) {
           includeVersionHistory: opts.includeVersions ?? ctx.exportOpts.includeVersionHistory,
           incremental: opts.incremental ?? ctx.exportOpts.incremental,
           archive: opts.zip ? "zip" as const : ctx.exportOpts.archive,
+          sanitize: opts.sanitize !== false && (ctx.exportOpts.sanitize ?? true),
+          preserveLocalFiles: opts.preserveLocalFiles ?? ctx.exportOpts.preserveLocalFiles ?? false,
+          keepOriginal: opts.keepOriginal ?? ctx.exportOpts.keepOriginal ?? false,
           filter: filter ?? ctx.exportOpts.filter,
           instanceName: ctx.clients.values().next().value?.name,
         };
@@ -78,6 +86,7 @@ export function registerExportCommand(program: Command) {
         let totalFailed = 0;
         let totalDuration = 0;
         let hasError = false;
+        const sanitizeIssues: RuleIssue[] = [];
 
         if (opts.allWorkspaces) {
           const pattern = opts.pattern !== "by-type" ? opts.pattern : "by-workspace";
@@ -96,6 +105,7 @@ export function registerExportCommand(program: Command) {
               totalSuccess += result.success.length;
               totalFailed += result.failed.length;
               totalDuration += result.duration;
+              for (const e of result.success) sanitizeIssues.push(...(e.issues ?? []));
               if (result.failed.length) hasError = true;
             } catch (e) {
               const msg = e instanceof Error ? e.message : String(e);
@@ -111,16 +121,12 @@ export function registerExportCommand(program: Command) {
           totalSuccess = result.success.length;
           totalFailed = result.failed.length;
           totalDuration = result.duration;
+          for (const e of result.success) sanitizeIssues.push(...(e.issues ?? []));
           hasError = result.failed.length > 0;
         }
 
         if (opts.json) {
-          console.log(JSON.stringify({
-            success: !hasError,
-            exported: totalSuccess,
-            failed: totalFailed,
-            duration: totalDuration,
-          }));
+          console.log(JSON.stringify(buildReport("export", sanitizeIssues, !hasError)));
         } else {
           console.error("");
           log.success(
@@ -128,6 +134,7 @@ export function registerExportCommand(program: Command) {
             `耗时 ${formatDuration(totalDuration)}`
           );
           if (totalFailed) log.warn(`${totalFailed} 个应用导出失败`);
+          if (sanitizeIssues.length) log.info(`已清洗 ${sanitizeIssues.length} 项跨 workspace 无效的 local 文件 default`);
         }
 
         process.exit(hasError ? 1 : 0);

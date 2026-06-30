@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { importApps, resolveImportPrefix, DEFAULT_SOURCE } from "../core/importer.js";
 import { setupPipe, storageFromFlags } from "../core/runner.js";
 import { PipeError } from "../core/errors.js";
+import { buildReport } from "../core/dsl-rules.js";
 import { createStorage } from "../storage/factory.js";
 import { log, formatDuration, setJsonMode, setLogLevel } from "../utils/logger.js";
 import pc from "picocolors";
@@ -28,6 +29,8 @@ export function registerImportCommand(program: Command) {
     .option("--git-branch <branch>", "Git 分支", "main")
     .option("--on-conflict <strategy>", "冲突策略: skip, overwrite", "skip")
     .option("--dry-run", "预览模式（不实际导入）")
+    .option("--fix", "自动修复预检 blocking 问题（删 local 文件 default、非法变量 id 换 UUID）")
+    .option("--target-dify-version <ver>", "目标 Dify 版本，用于 DSL schema 兼容 warning")
     .option("--workspace <id>", "指定 Workspace ID")
     .option("--json", "JSON 格式输出")
     .option("--verbose", "详细日志")
@@ -73,6 +76,8 @@ export function registerImportCommand(program: Command) {
         const result = await importApps(client, sourceStorage, {
           dryRun: opts.dryRun ?? ctx.importOpts.dryRun,
           onConflict: opts.onConflict !== "skip" ? opts.onConflict : ctx.importOpts.onConflict,
+          fix: opts.fix ?? ctx.importOpts.fix ?? false,
+          targetDifyVersion: opts.targetDifyVersion ?? ctx.importOpts.targetDifyVersion ?? client.getInfo().version,
           source: resolveImportPrefix({
             storageType: sourceStorageConfig.type,
             source: opts.source,
@@ -80,22 +85,12 @@ export function registerImportCommand(program: Command) {
           }),
         });
 
+        const blocking = result.issues.filter((i) => i.severity === "blocking").length;
+        const warnings = result.issues.filter((i) => i.severity === "warning").length;
+        const success = result.failed.length === 0 && blocking === 0;
+
         if (opts.json) {
-          console.log(JSON.stringify({
-            success: true,
-            dryRun: opts.dryRun,
-            created: result.created.length,
-            skipped: result.skipped.length,
-            overwritten: result.overwritten.length,
-            failed: result.failed.length,
-            duration: result.duration,
-            details: {
-              created: result.created,
-              skipped: result.skipped,
-              overwritten: result.overwritten,
-              failed: result.failed,
-            },
-          }));
+          console.log(JSON.stringify(buildReport("import", result.issues, success)));
         } else {
           console.error("");
           const prefix = opts.dryRun ? pc.yellow("[预览] ") : "";
@@ -108,12 +103,15 @@ export function registerImportCommand(program: Command) {
             `耗时 ${formatDuration(result.duration)}`
           );
 
+          if (blocking) log.warn(`${blocking} 项阻断问题（加 --fix 自动修复或手动处理）`);
+          if (warnings) log.info(`${warnings} 项 warning（插件/版本，建议确认）`);
+
           if (opts.dryRun && result.created.length + result.overwritten.length > 0) {
             console.error(pc.dim("  去掉 --dry-run 执行实际导入"));
           }
         }
 
-        process.exit(result.failed.length > 0 ? 1 : 0);
+        process.exit(!success ? 1 : 0);
       } catch (e) {
         if (opts.json) {
           const pe = e instanceof PipeError ? e.toJSON() : { success: false, error: e instanceof Error ? e.message : String(e) };

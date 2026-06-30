@@ -131,13 +131,27 @@ export class ModernAdapter implements DifyAdapter {
       return {
         appId: confirmBody.app_id ?? body.app_id ?? "",
         status: confirmBody.status ?? "completed",
+        importId: body.id,
       };
     }
 
     return {
       appId: body.app_id ?? "",
       status: body.status ?? "completed",
+      importId: body.id,
     };
+  }
+
+  /** GET /apps/imports/{id}/check-dependencies（Dify 1.15+）。返回 leaked dependencies。 */
+  async checkImportDependencies(importId: string): Promise<{ leaked: unknown[] }> {
+    try {
+      const res = await this.http.get(`/apps/imports/${importId}/check-dependencies`);
+      const body = res.body as { leaked_dependencies?: unknown[] };
+      return { leaked: body.leaked_dependencies ?? [] };
+    } catch {
+      // 老版本无此端点 → 不阻断 import，按无泄漏处理
+      return { leaked: [] };
+    }
   }
 
   async getWorkflowVersions(appId: string): Promise<WorkflowVersion[]> {
