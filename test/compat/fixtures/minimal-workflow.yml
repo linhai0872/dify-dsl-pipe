@@ -1,0 +1,102 @@
+app:
+  name: Compat Smoke Workflow
+  mode: workflow
+  icon: 🤖
+  icon_background: "#FFEAD5"
+  description: dify-dsl-pipe 兼容性冒烟测试应用
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.1.5
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions: []
+      allowed_file_types:
+        - image
+      allowed_file_upload_methods:
+        - local_file
+        - remote_url
+      enabled: false
+      fileUploadConfig:
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        image_file_size_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      number_limits: 3
+  graph:
+    edges:
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: start
+          targetType: end
+        id: start-source-end-target
+        source: start
+        sourceHandle: source
+        target: end
+        targetHandle: target
+        type: custom
+        zIndex: 0
+    nodes:
+      - data:
+          desc: ""
+          selected: false
+          title: Start
+          type: start
+          variables:
+            - label: query
+              max_length: 256
+              options: []
+              required: true
+              type: text-input
+              variable: query
+          viewport:
+            x: 0
+            y: 0
+            zoom: 1
+        height: 90
+        id: start
+        position:
+          x: 80
+          y: 280
+        positionAbsolute:
+          x: 80
+          y: 280
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 240
+      - data:
+          desc: ""
+          outputs:
+            - value_selector:
+                - start
+                - query
+              value_type: string
+              variable: result
+          selected: false
+          title: End
+          type: end
+        height: 90
+        id: end
+        position:
+          x: 380
+          y: 280
+        positionAbsolute:
+          x: 380
+          y: 280
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 240
+    viewport:
+      x: 0
+      y: 0
+      zoom: 1
