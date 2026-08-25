@@ -28,7 +28,7 @@ Dify 应用 DSL 的一站式管道工具，涵盖导出、导入、备份、迁�
 <tr><td><b>多实例管理</b></td><td>通过配置文件统一管理生产、测试、多租户等多套 Dify 环境，用 <code>--profile</code> 一键切换目标实例。</td></tr>
 <tr><td><b>定时备份服务</b></td><td>serve 模式以轻量 HTTP API 服务运行，内置 cron 定时任务管理，支持 Slack、企业微信、钉钉等 Webhook 通知。</td></tr>
 <tr><td><b>MCP Server</b></td><td>作为标准 MCP Server 暴露操作接口，Claude Code、Cursor、OpenCode 等 AI 工具可直接通过工具调用管理 Dify 应用。</td></tr>
-<tr><td><b>版本自动适配</b></td><td>自动检测 Dify 版本并切换对应 Adapter，兼容 Legacy（0.6 ~ 0.15.3）和 Modern（1.0+），无需手动配置。</td></tr>
+<tr><td><b>版本自动适配</b></td><td>自动检测 Dify 版本并切换对应 Adapter，无需手动配置。0.12 ~ 1.16 各版本的导入导出均经真实环境回归验证；0.12 之前的版本支持导出备份。</td></tr>
 </table>
 
 ---
