@@ -1,9 +1,12 @@
+# docstrata 全部层文档（对内沉淀，本地用，不提交）
 docs/internal/
-
-# docstrata 对内规划（本地用，不提交）
 docs/prd.md
 docs/requirements.md
 docs/INDEX.md
+docs/dev.md
+docs/wiki.md
+docs/repo-wiki.md
+docs/knowledge/
 node_modules/
 dist/
 skill-workspace/
