@@ -10,9 +10,7 @@ BASE="/opt/dify-compat"
 ENVDIR="${BASE}/envs/${VERSION}/docker"
 PROJ="dify-compat-${VERSION//./-}"
 
-ADMIN_EMAIL="admin@compat.test"
-ADMIN_NAME="Compat Admin"
-ADMIN_PASSWORD="***REMOVED***"
+. "$(dirname "${BASH_SOURCE[0]}")/config.sh"
 BASE_URL="http://127.0.0.1:${HOST_PORT}/console/api"
 
 cd "$ENVDIR"

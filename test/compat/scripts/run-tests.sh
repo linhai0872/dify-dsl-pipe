@@ -9,9 +9,10 @@ set -uo pipefail
 VERSION="${1:?}"
 HOST_PORT="${2:?}"
 HOST="${3:-100.84.215.119}"
+. "$(dirname "${BASH_SOURCE[0]}")/config.sh"
 BASE_URL="http://${HOST}:${HOST_PORT}/console/api"
-EMAIL="admin@compat.test"
-PASSWORD="***REMOVED***"
+EMAIL="$ADMIN_EMAIL"
+PASSWORD="$ADMIN_PASSWORD"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"

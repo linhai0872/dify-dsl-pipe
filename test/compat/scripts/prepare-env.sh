@@ -12,16 +12,11 @@ BASE="/opt/dify-compat"
 ENVDIR="${BASE}/envs/${VERSION}"
 PROJ="dify-compat-${VERSION//./-}"
 
-# 测试固定配置（仅测试环境使用，非生产）
-SECRET_KEY="compat-secret-$(echo -n "$VERSION" | md5sum | cut -c1-16)"
-DB_PASSWORD="***REMOVED***"
-REDIS_PASSWORD="***REMOVED***"
-ADMIN_EMAIL="admin@compat.test"
-ADMIN_NAME="Compat Admin"
-ADMIN_PASSWORD="***REMOVED***"
-# 官方默认测试 key（与官方 docker-compose 默认值一致，仅测试用）
-PLUGIN_DAEMON_KEY="***REMOVED***"
-PLUGIN_DIFY_INNER_API_KEY="***REMOVED***"
+# 加载公共配置（含密码，见 config.sh；真实值经 .env 注入，不入库）
+. "$(dirname "${BASH_SOURCE[0]}")/config.sh"
+
+# 测试固定配置（仅测试环境使用，非生产）。SECRET_KEY 按版本派生；密码来自 config.sh。
+SECRET_KEY="${COMPAT_SECRET_KEY:-compat-secret-$(echo -n "$VERSION" | md5sum | cut -c1-16)}"
 
 mkdir -p "$ENVDIR"
 
