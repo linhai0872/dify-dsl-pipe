@@ -5,9 +5,27 @@ import { LegacyAdapter } from "./legacy-adapter.js";
 import { ModernAdapter } from "./modern-adapter.js";
 import { HttpClient } from "./http.js";
 
-const LEGACY_MAX = "0.15.3";
+// Legacy/Modern 边界：0.12.0 起 Dify 引入两阶段导入 POST /apps/imports（+confirm），
+// 核心端点（/apps、/apps/{id}/export、login）在 0.12.0~1.x 完全一致，故 0.12.0 起走 Modern。
+// Legacy 仅服务 < 0.12.0（这些版本无 DSL 导入 API，同步 /apps/import 对其亦不成立）。
+const LEGACY_MAX = "0.11.99"; // 即 < 0.12.0
 const MODERN_MIN = "1.0.0";
 const MINIMUM_SUPPORTED = "0.6.0";
+
+/**
+ * 版本 → adapter 选择（纯函数，独立可测）。
+ * 无法解析的版本按 modern 处理（与 connect 的 fallback 一致）。
+ */
+export function resolveAdapterType(version: string): "legacy" | "modern" {
+  const clean = semver.coerce(version)?.version;
+  if (!clean || !semver.valid(clean)) return "modern";
+  if (semver.lt(clean, MINIMUM_SUPPORTED)) {
+    throw new Error(
+      `Dify ${version} 不受支持（最低要求 ${MINIMUM_SUPPORTED}）。请升级 Dify。`
+    );
+  }
+  return semver.lte(clean, LEGACY_MAX) ? "legacy" : "modern";
+}
 
 export class DifyClient {
   private adapter!: DifyAdapter;
@@ -59,21 +77,10 @@ export class DifyClient {
   }
 
   private buildInstanceInfo(version: string): DifyInstanceInfo {
-    const clean = semver.coerce(version)?.version ?? version;
-
-    if (semver.valid(clean) && semver.lt(clean, MINIMUM_SUPPORTED)) {
-      throw new Error(
-        `Dify ${version} 不受支持（最低要求 ${MINIMUM_SUPPORTED}）。请升级 Dify。`
-      );
-    }
-
-    const adapterType =
-      semver.valid(clean) && semver.lte(clean, LEGACY_MAX) ? "legacy" : "modern";
-
     return {
       version,
       url: this.config.baseUrl,
-      adapterType,
+      adapterType: resolveAdapterType(version),
     };
   }
 
