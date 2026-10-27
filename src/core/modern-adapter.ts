@@ -85,11 +85,10 @@ export class ModernAdapter implements DifyAdapter {
     }
   }
 
-  async getApps(page: number, limit: number) {
-    const res = await this.http.get("/apps", {
-      page: String(page),
-      limit: String(limit),
-    });
+  async getApps(page: number, limit: number, mode?: string) {
+    const params: Record<string, string> = { page: String(page), limit: String(limit) };
+    if (mode) params.mode = mode;
+    const res = await this.http.get("/apps", params);
     const body = res.body as { data?: DifyApp[]; total?: number; has_more?: boolean };
     return {
       data: body.data ?? [],

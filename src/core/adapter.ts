@@ -16,7 +16,7 @@ export interface ImportResult {
 
 export interface DifyAdapter {
   login(): Promise<void>;
-  getApps(page: number, limit: number): Promise<{ data: DifyApp[]; total: number; hasMore: boolean }>;
+  getApps(page: number, limit: number, mode?: string): Promise<{ data: DifyApp[]; total: number; hasMore: boolean }>;
   exportAppDSL(appId: string, includeSecret: boolean, workflowId?: string): Promise<string>;
   importAppDSL(dslContent: string, opts?: { name?: string; appId?: string }): Promise<ImportResult>;
   /** 按 app id 检查依赖泄漏（路径参数是 app_id，不是 import id）。 */

@@ -99,3 +99,45 @@ describe("DifyClient passthrough", () => {
     expect(result.leaked).toEqual([{ name: "p" }]);
   });
 });
+
+// 实测（GZ 1.18.0，2026-10-27）：GET /apps 默认及 mode=all 都不返回 mode=agent 应用，需单独 mode=agent 查询。
+describe("getAllApps 与 1.18 Agent 应用", () => {
+  function fakeDify(version: string, lists: { default: object[]; agent: object[] }) {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      const u = new URL(String(input));
+      urls.push(u.search);
+      const data = u.searchParams.get("mode") === "agent" ? lists.agent : lists.default;
+      return new Response(JSON.stringify({ data, total: data.length, has_more: false }), {
+        status: 200,
+        headers: { "content-type": "application/json", "x-version": version },
+      });
+    }));
+    return urls;
+  }
+
+  async function listNames() {
+    const client = new DifyClient({ baseUrl: "http://x/console/api", token: "t", timeout: 30, maxRetries: 0 });
+    await client.connect();
+    return (await client.getAllApps()).map((a) => a.name);
+  }
+
+  const wf = { id: "w1", name: "Flow", mode: "workflow", created_at: 1 };
+  const ag = { id: "a1", name: "Helper", mode: "agent", created_at: 2 };
+
+  it("1.18 合并默认列表与 mode=agent 列表", async () => {
+    fakeDify("1.18.0", { default: [wf], agent: [ag] });
+    expect(await listNames()).toEqual(["Flow", "Helper"]);
+  });
+
+  it("同一应用在两个列表都出现时不重复", async () => {
+    fakeDify("1.18.0", { default: [wf, ag], agent: [ag] });
+    expect(await listNames()).toEqual(["Flow", "Helper"]);
+  });
+
+  it("1.18 之前不发 mode=agent 请求", async () => {
+    const urls = fakeDify("1.17.1", { default: [wf], agent: [ag] });
+    expect(await listNames()).toEqual(["Flow"]);
+    expect(urls.some((s) => s.includes("mode=agent"))).toBe(false);
+  });
+});
