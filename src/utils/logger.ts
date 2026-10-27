@@ -66,7 +66,8 @@ export const log = {
 
 function emitJson(level: string, msg: string, data?: Record<string, unknown>) {
   const entry = { level, msg, ts: new Date().toISOString(), ...data };
-  console.log(JSON.stringify(entry));
+  // JSON 模式下日志走 stderr，stdout 只留给命令最终输出的 PipeReport
+  console.error(JSON.stringify(entry));
 }
 
 export function formatDuration(ms: number): string {

@@ -12,8 +12,16 @@
 |--------|------|
 | `list_instances` | 列出已连接的 Dify 实例及版本信息 |
 | `list_apps` | 列出指定实例的所有应用（含类型、标签） |
-| `export_apps` | 导出应用 DSL（支持过滤、增量导出） |
-| `import_apps` | 导入 DSL 到指定实例（支持冲突策略、预览模式） |
+| `export_apps` | 导出应用 DSL（参数：`instance`、`filter`、`incremental`） |
+| `import_apps` | 导入 DSL 到指定实例（参数：`instance`、`onConflict`、`dryRun`、`fix`、`publish`） |
+| `migrate_apps` | 跨实例迁移（参数：`to`、`from?`、`source?`、`yes?`、`fix?`、`publish?`、`onConflict?`）。`yes` 默认 false，只做预演不发导入请求 |
+| `diff_apps` | 备份 ↔ 线上语义对比（参数：`profile`、`source`、`check?`）。`check` 且存在漂移时返回 `isError: true` |
+
+### 返回值约定
+
+- `export_apps` / `import_apps` / `migrate_apps` / `diff_apps` 统一返回 **PipeReport** JSON（与 CLI `--json` 同一信封：`{command, success, summary, stats, meta, items[]}`，见 [CLI 参考](cli-reference.md#-json-输出pipereport-信封)）。
+- 所有工具出错时统一返回 PipeError 信封 `{success:false, error, code}` 并置 `isError: true`，不再直接抛异常；无法归类的异常（如 HTTP 4xx/5xx、网络错误）`code` 为 `ERR_UNKNOWN`。
+- `migrate_apps` / `diff_apps` 需要的 profile 从 serve 启动时加载的配置文件读取（需以 `--config` 启动）。
 
 ---
 

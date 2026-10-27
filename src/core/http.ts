@@ -1,3 +1,15 @@
+import { PipeError } from "./errors.js";
+
+export class HttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+  }
+}
+
 export interface HttpResponse {
   status: number;
   headers: Record<string, string>;
@@ -108,10 +120,18 @@ export class HttpClient {
         if (response.status >= 400) {
           const retryable = [429, 500, 502, 503, 504].includes(response.status);
           if (retryable && attempt < this.maxRetries) {
-            lastError = new Error(`HTTP ${response.status}: ${text.slice(0, 200)}`);
+            lastError = new HttpError(response.status, `HTTP ${response.status}: ${text.slice(0, 200)}`);
             continue;
           }
-          throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`);
+          const httpError = new HttpError(response.status, `HTTP ${response.status}: ${text.slice(0, 500)}`);
+          if (response.status === 403) {
+            throw new PipeError(
+              "ERR_FORBIDDEN",
+              `${httpError.message}。可能是 RBAC 权限不足，请联系管理员检查 DSL 导入/导出（或发布）权限`,
+              { cause: httpError },
+            );
+          }
+          throw httpError;
         }
 
         return {
@@ -123,7 +143,7 @@ export class HttpClient {
       } catch (e) {
         if (e instanceof Error && e.name === "AbortError") {
           lastError = new Error(`请求超时 (${this.timeout / 1000}s)`);
-        } else if (e instanceof Error && e.message.startsWith("HTTP ")) {
+        } else if (e instanceof HttpError || e instanceof PipeError) {
           throw e;
         } else {
           lastError = e instanceof Error ? e : new Error(String(e));

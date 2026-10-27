@@ -24,11 +24,40 @@ ssh "${GZ_SSH}" "bash /opt/dify-compat/scripts/compat-run.sh up" 2>&1 \
 
 echo "==> 3/3 逐版本冒烟测试"
 overall=0
-while IFS='|' read -r version port adapter note; do
-  [[ "$version" =~ ^#.*$ || -z "$version" ]] && continue
-  bash "${SCRIPT_DIR}/run-tests.sh" "$version" "$port" "$GZ_HOST" >/dev/null 2>&1 \
-    && echo "    ✅ $version" || { echo "    ❌ $version （见 test/compat/results/$version.log）"; overall=1; }
+# migrate roundtrip 需要一个目标版本：取矩阵中下一个非 legacy 版本（只做升级方向，
+# 最后一个版本跳过，不回环降级）；与 compat-run.sh 的规则保持一致。
+matrix_lines=()
+while IFS= read -r line; do
+  [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+  matrix_lines+=("$line")
 done < "$MATRIX"
+
+migrate_target_port() {
+  local cur="$1" i v p a n target=""
+  for i in "${!matrix_lines[@]}"; do
+    IFS='|' read -r v p a n <<< "${matrix_lines[$i]}"
+    [ "$v" != "$cur" ] && continue
+    local j
+    for ((j = i + 1; j < ${#matrix_lines[@]}; j++)); do
+      IFS='|' read -r _v _p _a _n <<< "${matrix_lines[$j]}"
+      [ "$_a" != "legacy" ] && { target="$_p"; break; }
+    done
+    break
+  done
+  echo "$target"
+}
+
+for line in "${matrix_lines[@]}"; do
+  IFS='|' read -r version port adapter note <<< "$line"
+  target_port="$(migrate_target_port "$version")"
+  if [ -n "$target_port" ]; then
+    bash "${SCRIPT_DIR}/run-tests.sh" "$version" "$port" "$GZ_HOST" "$target_port" >/dev/null 2>&1 \
+      && echo "    ✅ $version" || { echo "    ❌ $version （见 test/compat/results/$version.log）"; overall=1; }
+  else
+    bash "${SCRIPT_DIR}/run-tests.sh" "$version" "$port" "$GZ_HOST" >/dev/null 2>&1 \
+      && echo "    ✅ $version" || { echo "    ❌ $version （见 test/compat/results/$version.log）"; overall=1; }
+  fi
+done
 
 echo "=============================="
 grep -h "^RESULT" "${SCRIPT_DIR}/../results/"*.log 2>/dev/null | sort | sed 's/^/  /'

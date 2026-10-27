@@ -1,6 +1,7 @@
-import type { DifyAdapter, AdapterConfig } from "./adapter.js";
+import type { DifyAdapter, AdapterConfig, ImportResult } from "./adapter.js";
 import type { DifyApp, DifyWorkspace, WorkflowVersion } from "./types.js";
 import { HttpClient } from "./http.js";
+import { PipeError } from "./errors.js";
 
 export class LegacyAdapter implements DifyAdapter {
   private http: HttpClient;
@@ -53,6 +54,8 @@ export class LegacyAdapter implements DifyAdapter {
   async exportAppDSL(appId: string, includeSecret: boolean, workflowId?: string) {
     const params: Record<string, string> = {
       include_secret: String(includeSecret),
+      // 与 modern 保持一致；< 0.12 无 format 概念但忽略未知参数
+      format: "yaml",
     };
     if (workflowId) params.workflow_id = workflowId;
 
@@ -61,25 +64,23 @@ export class LegacyAdapter implements DifyAdapter {
     return body.data ?? "";
   }
 
-  async importAppDSL(dslContent: string, opts?: { name?: string; appId?: string }) {
-    if (opts?.appId) {
-      await this.http.post(`/apps/${opts.appId}/workflows/draft/import`, {
-        data: dslContent,
-      });
-      return { appId: opts.appId, status: "completed" };
-    }
-
-    const res = await this.http.post("/apps/import", {
-      data: dslContent,
-      name: opts?.name,
-    });
-    const body = res.body as { app_id?: string };
-    return { appId: body.app_id ?? "", status: "completed" };
+  async importAppDSL(_dslContent: string, _opts?: { name?: string; appId?: string }): Promise<ImportResult> {
+    throw new PipeError(
+      "ERR_VERSION_UNSUPPORTED",
+      "Dify < 0.12 不支持 DSL 导入，仅支持导出备份",
+    );
   }
 
   /** Legacy 无 check-dependencies 端点。 */
-  async checkImportDependencies(_importId: string): Promise<{ leaked: unknown[] }> {
+  async checkImportDependencies(_appId: string): Promise<{ leaked: unknown[] }> {
     return { leaked: [] };
+  }
+
+  async publishWorkflow(_appId: string): Promise<void> {
+    throw new PipeError(
+      "ERR_VERSION_UNSUPPORTED",
+      "Dify < 0.12 不支持发布，仅支持导出备份",
+    );
   }
 
   async getWorkflowVersions(appId: string): Promise<WorkflowVersion[]> {

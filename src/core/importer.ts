@@ -5,7 +5,8 @@ import type { ImportResult, ImportItem, DifyApp } from "./types.js";
 import type { RuleIssue } from "./report.js";
 import type { ImportOptions } from "../config/types.js";
 import { preflightImportDSL } from "./dsl-rules.js";
-import { log, formatDuration } from "../utils/logger.js";
+import { listDslFiles } from "./source.js";
+import { log } from "../utils/logger.js";
 
 export const DEFAULT_SOURCE = "./dify-backup";
 
@@ -38,16 +39,17 @@ export async function importApps(
   const skipped: { name: string; reason: string }[] = [];
   const overwritten: { name: string; appId: string }[] = [];
   const failed: { name: string; error: string }[] = [];
+  const published: { name: string; appId: string }[] = [];
+  const publishFailed: { name: string; error: string }[] = [];
   const issues: RuleIssue[] = [];
 
   // 收集要导入的文件
   const prefix = opts.source ?? "";
-  const files = await storage.list(prefix);
-  const ymlFiles = files.filter((f) => f.endsWith(".yml") || f.endsWith(".yaml"));
+  const ymlFiles = await listDslFiles(storage, prefix);
 
   if (!ymlFiles.length) {
     log.warn("未找到任何 DSL 文件");
-    return { created, skipped, overwritten, failed, issues, duration: Date.now() - start };
+    return { created, skipped, overwritten, failed, published, publishFailed, issues, duration: Date.now() - start };
   }
 
   log.info(`找到 ${ymlFiles.length} 个 DSL 文件`);
@@ -62,11 +64,6 @@ export async function importApps(
   // 解析、预检、规划导入
   const items: ImportItem[] = [];
   for (const file of ymlFiles) {
-    // 跳过版本历史文件
-    if (file.includes("_versions/")) continue;
-    // 跳过状态文件
-    if (file.endsWith(".json")) continue;
-
     try {
       const content = await storage.read(file);
       const name = extractAppName(content) ?? fileToAppName(file);
@@ -76,7 +73,20 @@ export async function importApps(
       let reason: string | undefined;
 
       if (existing) {
-        if (opts.onConflict === "overwrite") {
+        // Dify 1.18 拒绝覆盖已有 Agent 应用（HTTP 400 "only supports creating a new Agent App"）
+        const isAgent = existing.mode === "agent" || extractAppMode(content) === "agent";
+        if (opts.onConflict === "overwrite" && isAgent) {
+          action = "skip";
+          reason = "Dify 不支持覆盖 Agent 应用";
+          issues.push({
+            severity: "warning",
+            code: "AGENT_OVERWRITE_UNSUPPORTED",
+            app: name,
+            file,
+            problem: `同名 Agent 应用已存在（${existing.id.slice(0, 8)}），Dify 不支持覆盖 Agent 应用，已跳过`,
+            suggestion: "在 Dify 中删除或改名旧应用后重新导入",
+          });
+        } else if (opts.onConflict === "overwrite") {
           action = "overwrite";
         } else {
           action = "skip";
@@ -132,7 +142,7 @@ export async function importApps(
       else if (item.action === "skip") skipped.push({ name: item.name, reason: item.reason ?? "" });
       else if (item.action === "overwrite") overwritten.push({ name: item.name, appId: "(dry-run)" });
     }
-    return { created, skipped, overwritten, failed, issues, duration: Date.now() - start };
+    return { created, skipped, overwritten, failed, published, publishFailed, issues, duration: Date.now() - start };
   }
 
   // 执行导入
@@ -161,23 +171,69 @@ export async function importApps(
         created.push({ name: item.name, appId: result.appId });
       }
 
-      // 导入成功后 check-dependencies（对齐 difyctl import 行为）
-      if (result.importId) {
-        try {
-          const dep = await client.checkImportDependencies(result.importId);
-          if (dep.leaked.length) {
+      // Dify 1.18 导入 warnings → DIFY_IMPORT_WARNING
+      for (const w of result.warnings ?? []) {
+        issues.push({
+          severity: "warning",
+          code: "DIFY_IMPORT_WARNING",
+          app: item.name,
+          file: item.filePath,
+          problem: w.message,
+          suggestion: "按 Dify 提示补齐缺失依赖或配置后重新运行",
+          location: w.path,
+          detail: JSON.stringify(w),
+        });
+      }
+
+      // 导入成功后 check-dependencies（按 appId，不是 importId；H2）
+      try {
+        const dep = await client.checkImportDependencies(result.appId);
+        if (dep.leaked.length) {
+          issues.push({
+            severity: "warning",
+            code: "PLUGIN_MISSING",
+            app: item.name,
+            file: item.filePath,
+            problem: `目标实例缺少 ${dep.leaked.length} 个插件依赖`,
+            suggestion: "按提示安装对应插件后重新运行应用；或走 grilling 确认插件来源",
+            detail: JSON.stringify(dep.leaked),
+          });
+        }
+      } catch {
+        // check-dependencies 不可用（老版本）→ 静默跳过
+      }
+
+      // 发布（仅 workflow / advanced-chat）
+      const mode = extractAppMode(item.dslContent);
+      if (mode === "workflow" || mode === "advanced-chat") {
+        if (opts.publish) {
+          try {
+            await client.publishWorkflow(result.appId);
+            published.push({ name: item.name, appId: result.appId });
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            publishFailed.push({ name: item.name, error: msg.slice(0, 200) });
             issues.push({
               severity: "warning",
-              code: "PLUGIN_MISSING",
+              code: "PUBLISH_FAILED",
               app: item.name,
               file: item.filePath,
-              problem: `目标实例缺少 ${dep.leaked.length} 个插件依赖`,
-              suggestion: "按提示安装对应插件后重新运行应用；或走 grilling 确认插件来源",
-              detail: JSON.stringify(dep.leaked),
+              problem: `发布失败：${msg.slice(0, 150)}`,
+              suggestion: "在 Dify 中手动发布，或修复问题后重试 --publish",
             });
           }
-        } catch {
-          // check-dependencies 不可用（老版本）→ 静默跳过
+        } else {
+          issues.push({
+            severity: "info",
+            code: "NOT_PUBLISHED",
+            app: item.name,
+            file: item.filePath,
+            problem:
+              item.action === "overwrite"
+                ? "草稿已替换，线上仍运行旧发布版本"
+                : "已导入为草稿，发布前 Service API / Web App 不可用",
+            suggestion: "加 --publish 自动发布，或在 Dify 中手动发布",
+          });
         }
       }
     } catch (e) {
@@ -187,13 +243,23 @@ export async function importApps(
     }
   }
 
-  return { created, skipped, overwritten, failed, issues, duration: Date.now() - start };
+  return { created, skipped, overwritten, failed, published, publishFailed, issues, duration: Date.now() - start };
 }
 
 function extractAppName(dslContent: string): string | null {
   try {
     const parsed = parseYaml(dslContent);
     return parsed?.app?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function extractAppMode(dslContent: string): string | null {
+  try {
+    const parsed = parseYaml(dslContent);
+    const mode = parsed?.app?.mode;
+    return typeof mode === "string" ? mode : null;
   } catch {
     return null;
   }

@@ -4,6 +4,7 @@ import {
   sanitizeExportDSL,
   preflightImportDSL,
   buildReport,
+  checkAgentAssets,
 } from "../src/core/dsl-rules.js";
 
 // 真实样本骨架（PO信息提取工作流，1.8.1 二开版）：
@@ -272,6 +273,103 @@ describe("preflightImportDSL", () => {
       { variable: "f", type: "file", default: { transfer_method: "local_file", upload_file_id: "a" } },
     ]);
     const r = preflightImportDSL(d, { app: "T" });
+    expect(r.fixedDsl).toBeUndefined();
+    expect(r.modified).toBe(false);
+  });
+});
+
+// Dify 1.18：内嵌 Agent 走 agent_packages，Skill/文件不进 YAML，落在 omitted_assets。
+function dsl118(omittedAssets: unknown, pkgKey = "agent_1"): string {
+  return stringifyYaml({
+    app: { name: "T", mode: "workflow" },
+    kind: "app",
+    version: "0.4.0",
+    agent_packages: {
+      [pkgKey]: { kind: "dify_agent", omitted_assets: omittedAssets },
+    },
+    workflow: {
+      conversation_variables: [],
+      environment_variables: [],
+      graph: { nodes: [{ id: "start", data: { type: "start", variables: [] } }], edges: [] },
+    },
+  });
+}
+
+describe("checkAgentAssets / AGENT_ASSETS_OMITTED", () => {
+  it("omitted_assets 含 1 个 skill → 一条 warning，指名包与资源", () => {
+    const issues = checkAgentAssets(
+      dsl118([{ kind: "skill", name: "web-search" }]),
+      ctx
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0].code).toBe("AGENT_ASSETS_OMITTED");
+    expect(issues[0].severity).toBe("warning");
+    expect(issues[0].location).toBe("agent_packages.agent_1");
+    expect(issues[0].app).toBe("T");
+    expect(issues[0].file).toBe("T.yml");
+    expect(issues[0].problem).toContain("agent_1");
+    expect(issues[0].problem).toContain("web-search");
+    expect(issues[0].suggestion).toContain(".ifpkg");
+  });
+
+  it("多种 kind → problem 列出各类数量与名称", () => {
+    const issues = checkAgentAssets(
+      dsl118([
+        { kind: "skill", name: "s1" },
+        { kind: "skill", name: "s2" },
+        { kind: "file", name: "a.pdf" },
+      ])
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0].problem).toContain("2 个Skill（s1、s2）");
+    expect(issues[0].problem).toContain("1 个文件（a.pdf）");
+  });
+
+  it("多个包各自 omitted_assets → 每包一条", () => {
+    const d = stringifyYaml({
+      agent_packages: {
+        a1: { omitted_assets: [{ kind: "skill", name: "x" }] },
+        a2: { omitted_assets: [{ kind: "file", name: "y" }] },
+        a3: { omitted_assets: [] },
+      },
+    });
+    const issues = checkAgentAssets(d);
+    expect(issues).toHaveLength(2);
+    expect(issues.map((i) => i.location)).toEqual([
+      "agent_packages.a1",
+      "agent_packages.a2",
+    ]);
+  });
+
+  it("omitted_assets 为空 → 不报", () => {
+    expect(checkAgentAssets(dsl118([]))).toEqual([]);
+    expect(checkAgentAssets(dsl118(undefined))).toEqual([]);
+  });
+
+  it("无 agent_packages → 不报", () => {
+    expect(checkAgentAssets(dsl([]))).toEqual([]);
+  });
+
+  it("无法解析的 YAML → [] 不抛", () => {
+    expect(checkAgentAssets("foo: [bar")).toEqual([]);
+  });
+
+  it("preflightImportDSL 含该规则，warning 不阻断", () => {
+    const r = preflightImportDSL(
+      dsl118([{ kind: "skill", name: "web-search" }]),
+      { app: "T", file: "T.yml" }
+    );
+    const issue = r.issues.find((i) => i.code === "AGENT_ASSETS_OMITTED");
+    expect(issue?.severity).toBe("warning");
+    expect(issue?.app).toBe("T");
+    expect(r.issues.some((i) => i.severity === "blocking")).toBe(false);
+  });
+
+  it("fix 不降级 AGENT_ASSETS_OMITTED，也不改动 DSL", () => {
+    const d = dsl118([{ kind: "skill", name: "web-search" }]);
+    const r = preflightImportDSL(d, { app: "T", fix: true });
+    const issue = r.issues.find((i) => i.code === "AGENT_ASSETS_OMITTED");
+    expect(issue?.severity).toBe("warning");
     expect(r.fixedDsl).toBeUndefined();
     expect(r.modified).toBe(false);
   });

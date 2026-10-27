@@ -42,13 +42,15 @@ export class S3Storage implements StorageBackend {
     return `${this.prefix}${path}`;
   }
 
-  async write(path: string, content: string): Promise<void> {
+  async write(path: string, content: string | Buffer): Promise<void> {
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: this.key(path),
         Body: content,
-        ContentType: "text/yaml; charset=utf-8",
+        ...(Buffer.isBuffer(content)
+          ? {}
+          : { ContentType: "text/yaml; charset=utf-8" }),
       })
     );
   }

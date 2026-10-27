@@ -23,12 +23,14 @@ No installation required. Run directly with `npx`.
 
 <table>
 <tr><td><b>Export & Backup</b></td><td>Bulk export all app DSLs with flexible filtering by type, tag, or name. Incremental mode syncs only changed apps.</td></tr>
-<tr><td><b>Import & Migrate</b></td><td>Restore from backup or migrate apps across instances. Dry-run preview and conflict strategy included — review before committing.</td></tr>
+<tr><td><b>Import & Migrate</b></td><td>Restore from backup, or migrate across instances with a single command (export → sanitize → preview → import). Preview-only by default; add <code>--yes</code> to run the import, optionally <code>--publish</code> to publish.</td></tr>
+<tr><td><b>Backup ↔ Live Drift</b></td><td><code>diff</code> compares backups against the live instance with semantic projection (ignoring ordering, coordinates, and other noise). <code>--check</code> exits 1 on drift — CI-ready.</td></tr>
+<tr><td><b>Offline Lint</b></td><td><code>lint</code> runs the import preflight rules on a backup directory without touching Dify (including missing Agent assets warnings) — catch unimportable DSLs in CI.</td></tr>
 <tr><td><b>Multiple Storage Backends</b></td><td>Local directory, Git repo (auto-commit), AWS S3 and all S3-compatible storage (Aliyun OSS / Tencent COS / Volcengine TOS / MinIO / Cloudflare R2).</td></tr>
 <tr><td><b>Multi-instance Management</b></td><td>Manage prod, staging, and multi-tenant Dify environments through a single config file. Switch targets with <code>--profile</code>.</td></tr>
 <tr><td><b>Scheduled Backup Service</b></td><td>serve mode runs as a lightweight HTTP API with built-in cron job management and Webhook notifications for Slack, WeCom, DingTalk, and more.</td></tr>
 <tr><td><b>MCP Server</b></td><td>Exposes operations as a standard MCP Server. Claude Code, Cursor, OpenCode and other AI tools can manage Dify apps through tool calls.</td></tr>
-<tr><td><b>Auto Version Detection</b></td><td>Automatically detects Dify version and switches the correct Adapter, no manual configuration needed. Import and export are verified against Dify 0.12–1.16 in real environments; versions before 0.12 support export and backup.</td></tr>
+<tr><td><b>Auto Version Detection</b></td><td>Automatically detects Dify version and switches the correct Adapter, no manual configuration needed. Import, export and cross-version migration are regression-verified against Dify 0.12–1.18 on real instances (including 1.18 YAML export via <code>format=yaml</code> and plugin-dependency detection); versions before 0.12 support export and backup only.</td></tr>
 </table>
 
 ---
@@ -53,9 +55,23 @@ npx dify-dsl-pipe import --url https://target-dify.com/console/api --token TOKEN
 
 # Interactively create a config file
 npx dify-dsl-pipe init
+
+# One-command cross-instance migration: preview by default, add --yes to run
+npx dify-dsl-pipe init --name prod --url https://dify.prod.com/console/api --token PROD_TOKEN
+npx dify-dsl-pipe init --name staging --url https://dify.staging.com/console/api --token STAGING_TOKEN
+npx dify-dsl-pipe migrate --from prod --to staging          # preview
+npx dify-dsl-pipe migrate --from prod --to staging --yes    # run the import
+
+# Diff backup against the live instance; --check exits 1 on drift (CI)
+npx dify-dsl-pipe diff --profile prod --source ./dify-backup --check
+
+# Offline check: will this backup import cleanly?
+npx dify-dsl-pipe lint --source ./dify-backup
 ```
 
 > `--url` must point to the Console API, ending with `/console/api`.
+
+> Imported workflow / advanced-chat apps (`import` / `migrate`) are **drafts only** by default — the target instance's Service API / Web App is not affected until published. Add `--publish` to publish right after import (on overwrite the live app keeps running the old published version until the publish succeeds).
 
 ### Option 2: Agent Skill
 
@@ -78,7 +94,7 @@ The Skill will interpret your intent, ask for any missing details, assemble the 
 
 | Doc | Contents |
 |-----|----------|
-| [CLI Reference](docs/cli-reference.md) | All parameters for export / import / serve |
+| [CLI Reference](docs/cli-reference.md) | All parameters for export / import / migrate / diff / lint / serve |
 | [Storage Backends](docs/storage.md) | local / git / MinIO / AWS S3 / Cloudflare R2 / Aliyun OSS / Tencent COS / Volcengine TOS |
 | [Config File Reference](docs/config-file.md) | Full dify-pipe.yaml field reference |
 | [Scheduled Backup Service](docs/serve.md) | serve mode, HTTP API endpoints, cron job management |

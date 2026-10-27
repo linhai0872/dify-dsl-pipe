@@ -72,6 +72,7 @@ export const ImportOptionsSchema = z.object({
   dryRun: z.boolean().default(false),
   onConflict: z.enum(["skip", "overwrite"]).default("skip"),
   fix: z.boolean().default(false),
+  publish: z.boolean().optional(),
   targetDifyVersion: z.string().optional(),
 });
 

@@ -1,7 +1,7 @@
 import semver from "semver";
-import type { DifyAdapter, AdapterConfig } from "./adapter.js";
+import type { DifyAdapter, AdapterConfig, ImportWarning } from "./adapter.js";
 import type { DifyApp, DifyWorkspace, WorkflowVersion } from "./types.js";
-import { HttpClient } from "./http.js";
+import { HttpClient, HttpError } from "./http.js";
 
 // Dify ≥ 1.11.2 expects Base64-encoded password (PR #29659, merged 2025-12-16)
 const PASSWORD_BASE64_MIN = "1.11.2";
@@ -46,7 +46,7 @@ export class ModernAdapter implements DifyAdapter {
         await this.doLogin(email, pw);
         return;
       } catch (e) {
-        if (e instanceof Error && e.message.includes("401")) {
+        if (e instanceof HttpError && e.status === 401) {
           lastError = e;
         } else {
           throw e;
@@ -85,11 +85,10 @@ export class ModernAdapter implements DifyAdapter {
     }
   }
 
-  async getApps(page: number, limit: number) {
-    const res = await this.http.get("/apps", {
-      page: String(page),
-      limit: String(limit),
-    });
+  async getApps(page: number, limit: number, mode?: string) {
+    const params: Record<string, string> = { page: String(page), limit: String(limit) };
+    if (mode) params.mode = mode;
+    const res = await this.http.get("/apps", params);
     const body = res.body as { data?: DifyApp[]; total?: number; has_more?: boolean };
     return {
       data: body.data ?? [],
@@ -101,6 +100,8 @@ export class ModernAdapter implements DifyAdapter {
   async exportAppDSL(appId: string, includeSecret: boolean, workflowId?: string) {
     const params: Record<string, string> = {
       include_secret: String(includeSecret),
+      // Dify 1.18 起不带 format 默认返回 .ifpkg zip；旧版本忽略未知参数，故无条件发送
+      format: "yaml",
     };
     if (workflowId) params.workflow_id = workflowId;
 
@@ -122,36 +123,57 @@ export class ModernAdapter implements DifyAdapter {
       id?: string;
       status?: string;
       app_id?: string;
+      warnings?: ImportWarning[];
+      error?: string;
     };
 
     // 如果状态是 PENDING，需要 confirm
     if (String(body.status ?? "").toLowerCase() === "pending" && body.id) {
       const confirmRes = await this.http.post(`/apps/imports/${body.id}/confirm`);
-      const confirmBody = confirmRes.body as { app_id?: string; status?: string };
+      const confirmBody = confirmRes.body as {
+        app_id?: string;
+        status?: string;
+        warnings?: ImportWarning[];
+        error?: string;
+      };
+      if (String(confirmBody.status ?? "").toLowerCase() === "failed") {
+        throw new Error(confirmBody.error ?? "导入失败");
+      }
       return {
         appId: confirmBody.app_id ?? body.app_id ?? "",
         status: confirmBody.status ?? "completed",
         importId: body.id,
+        warnings: confirmBody.warnings ?? body.warnings ?? [],
       };
+    }
+
+    if (String(body.status ?? "").toLowerCase() === "failed") {
+      throw new Error(body.error ?? "导入失败");
     }
 
     return {
       appId: body.app_id ?? "",
       status: body.status ?? "completed",
       importId: body.id,
+      warnings: body.warnings ?? [],
     };
   }
 
-  /** GET /apps/imports/{id}/check-dependencies（Dify 1.15+）。返回 leaked dependencies。 */
-  async checkImportDependencies(importId: string): Promise<{ leaked: unknown[] }> {
+  /** GET /apps/imports/{appId}/check-dependencies（Dify 1.15+，路径参数是 app id）。返回 leaked dependencies。 */
+  async checkImportDependencies(appId: string): Promise<{ leaked: unknown[] }> {
     try {
-      const res = await this.http.get(`/apps/imports/${importId}/check-dependencies`);
+      const res = await this.http.get(`/apps/imports/${appId}/check-dependencies`);
       const body = res.body as { leaked_dependencies?: unknown[] };
       return { leaked: body.leaked_dependencies ?? [] };
     } catch {
       // 老版本无此端点 → 不阻断 import，按无泄漏处理
       return { leaked: [] };
     }
+  }
+
+  /** POST /apps/{id}/workflows/publish（0.15.3~1.18.0 通用，空 body）。导入只写草稿，发布需显式调用。 */
+  async publishWorkflow(appId: string): Promise<void> {
+    await this.http.post(`/apps/${appId}/workflows/publish`, {});
   }
 
   async getWorkflowVersions(appId: string): Promise<WorkflowVersion[]> {

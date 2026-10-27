@@ -3,6 +3,9 @@ import { registerExportCommand } from "./commands/export.js";
 import { registerImportCommand } from "./commands/import.js";
 import { registerInitCommand } from "./commands/init.js";
 import { registerServeCommand } from "./commands/serve.js";
+import { registerLintCommand } from "./commands/lint.js";
+import { registerMigrateCommand } from "./commands/migrate.js";
+import { registerDiffCommand } from "./commands/diff.js";
 import { listPresets } from "./utils/naming.js";
 import { VERSION } from "./version.js";
 
@@ -17,6 +20,9 @@ registerExportCommand(program);
 registerImportCommand(program);
 registerInitCommand(program);
 registerServeCommand(program);
+registerLintCommand(program);
+registerMigrateCommand(program);
+registerDiffCommand(program);
 
 program
   .command("presets")

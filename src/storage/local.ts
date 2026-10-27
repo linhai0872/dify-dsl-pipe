@@ -10,10 +10,14 @@ export class LocalStorage implements StorageBackend {
     mkdirSync(this.basePath, { recursive: true });
   }
 
-  async write(path: string, content: string): Promise<void> {
+  async write(path: string, content: string | Buffer): Promise<void> {
     const fullPath = resolve(this.basePath, path);
     mkdirSync(dirname(fullPath), { recursive: true });
-    writeFileSync(fullPath, content, "utf-8");
+    if (Buffer.isBuffer(content)) {
+      writeFileSync(fullPath, content);
+    } else {
+      writeFileSync(fullPath, content, "utf-8");
+    }
   }
 
   async read(path: string): Promise<string> {

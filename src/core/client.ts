@@ -11,6 +11,7 @@ import { HttpClient } from "./http.js";
 const LEGACY_MAX = "0.11.99"; // 即 < 0.12.0
 const MODERN_MIN = "1.0.0";
 const MINIMUM_SUPPORTED = "0.6.0";
+const AGENT_APPS_SEPARATE_MIN = "1.18.0";
 
 /**
  * 版本 → adapter 选择（纯函数，独立可测）。
@@ -92,16 +93,14 @@ export class DifyClient {
   }
 
   async getAllApps(filter?: AppFilter): Promise<DifyApp[]> {
-    const allApps: DifyApp[] = [];
-    let page = 1;
-    const limit = 100;
-
-    while (true) {
-      const result = await this.adapter.getApps(page, limit);
-      if (!result.data.length) break;
-      allApps.push(...result.data);
-      if (allApps.length >= result.total || !result.hasMore) break;
-      page++;
+    const allApps = await this.fetchAppPages();
+    // 1.18 起 GET /apps 默认（含 mode=all）不返回 Agent 应用，需单独按 mode=agent 查询
+    const clean = semver.coerce(this.instanceInfo.version)?.version;
+    if (clean && semver.gte(clean, AGENT_APPS_SEPARATE_MIN)) {
+      const seen = new Set(allApps.map((a) => a.id));
+      for (const app of await this.fetchAppPages("agent")) {
+        if (!seen.has(app.id)) allApps.push(app);
+      }
     }
 
     allApps.sort((a, b) => {
@@ -112,6 +111,21 @@ export class DifyClient {
 
     if (!filter) return allApps;
     return this.applyFilter(allApps, filter);
+  }
+
+  private async fetchAppPages(mode?: string): Promise<DifyApp[]> {
+    const apps: DifyApp[] = [];
+    let page = 1;
+    const limit = 100;
+
+    while (true) {
+      const result = await this.adapter.getApps(page, limit, mode);
+      if (!result.data.length) break;
+      apps.push(...result.data);
+      if (apps.length >= result.total || !result.hasMore) break;
+      page++;
+    }
+    return apps;
   }
 
   private applyFilter(apps: DifyApp[], filter: AppFilter): DifyApp[] {
@@ -154,8 +168,12 @@ export class DifyClient {
     return this.adapter.importAppDSL(dslContent, opts);
   }
 
-  async checkImportDependencies(importId: string): Promise<{ leaked: unknown[] }> {
-    return this.adapter.checkImportDependencies(importId);
+  async checkImportDependencies(appId: string): Promise<{ leaked: unknown[] }> {
+    return this.adapter.checkImportDependencies(appId);
+  }
+
+  async publishWorkflow(appId: string): Promise<void> {
+    return this.adapter.publishWorkflow(appId);
   }
 
   async getWorkflowVersions(appId: string): Promise<WorkflowVersion[]> {

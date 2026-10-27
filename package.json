@@ -1,6 +1,6 @@
 {
   "name": "dify-dsl-pipe",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Dify DSL 一站式管道工具 — 导出、导入、跨实例迁移",
   "type": "module",
   "bin": {
@@ -19,7 +19,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:compat": "bash test/compat/scripts/local-compat.sh",
-    "lint": "eslint src/",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

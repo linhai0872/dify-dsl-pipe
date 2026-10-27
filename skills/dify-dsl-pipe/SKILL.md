@@ -5,13 +5,13 @@ compatibility: "Uses npx dify-dsl-pipe — zero install required, npx handles it
 license: MIT
 metadata:
   author: linhai0872
-  version: "0.3.0"
+  version: "0.4.0"
   tags: "dify,backup,migration,export,import,mcp,cli"
   homepage: "https://github.com/linhai0872/dify-dsl-pipe"
   npm: "https://www.npmjs.com/package/dify-dsl-pipe"
 allowed-tools: Bash(npx:*) Bash(node:*) Read Write
 user-invocable: true
-argument-hint: "[export|import|serve|init] [options]"
+argument-hint: "[export|import|migrate|diff|lint|serve|init] [options]"
 ---
 
 # dify-dsl-pipe
@@ -41,10 +41,13 @@ Dify DSL 一站式管道工具。零安装（`npx` 直接使用），支持导�
 |------|------|
 | 一次性导出备份 | `export` |
 | 从备份还原 / 跨实例导入 | `import` |
+| 一条命令跨实例迁移（预演 → `--yes`） | `migrate` |
+| 备份 ↔ 线上差异对比（CI 用 `--check`） | `diff` |
+| 离线检查备份能否干净导入（CI） | `lint` |
 | 多实例管理 + 跨环境迁移 | 配置文件 + `--profile` |
 | 持久化备份服务（HTTP API + 定时任务） | `serve` |
 | 暴露为 MCP Server 供 AI 工具集成 | `serve --mcp` |
-| 初始化配置文件 | `init` |
+| 初始化配置文件（含非交互 `--name`） | `init` |
 
 ---
 
@@ -99,6 +102,52 @@ npx dify-dsl-pipe import --url <URL> --token <TOKEN> --source ./backup --fix
 
 # 覆盖同名应用
 npx dify-dsl-pipe import --url <URL> --token <TOKEN> --source ./backup --on-conflict overwrite
+
+# 导入后直接发布 workflow / advanced-chat（默认只导入为草稿）
+npx dify-dsl-pipe import --url <URL> --token <TOKEN> --source ./backup --publish
+```
+
+### 跨实例迁移（migrate）
+
+```bash
+# 前置：先用非交互 init 建两个 profile（各含 instance + local storage）
+npx dify-dsl-pipe init --name prod    --url <PROD_URL>    --token <PROD_TOKEN>
+npx dify-dsl-pipe init --name staging --url <STAGING_URL> --token <STAGING_TOKEN>
+
+# 预演：导出 prod → 清洗 → dry-run 导入 staging，不发任何导入请求
+npx dify-dsl-pipe migrate --from prod --to staging
+
+# 用户确认后执行导入
+npx dify-dsl-pipe migrate --from prod --to staging --yes
+
+# 已有本地备份目录时跳过导出
+npx dify-dsl-pipe migrate --source ./dify-backup --to staging --yes
+```
+
+### 备份 ↔ 线上对比（diff）
+
+```bash
+# 语义对比备份与线上（只读；忽略排序/坐标等噪声）
+npx dify-dsl-pipe diff --profile prod --source ./dify-backup
+
+# CI 用法：发现漂移即退出码 1
+npx dify-dsl-pipe diff --profile prod --source ./dify-backup --check
+
+# 列出具体变化路径与两边取值
+npx dify-dsl-pipe diff --profile prod --source ./dify-backup --show-chunks
+
+# 两份本地备份互比（不连 Dify）
+npx dify-dsl-pipe diff --baseline ./backup-old --source ./backup-new
+```
+
+### 离线检查（lint）
+
+```bash
+# 不连 Dify，对备份目录跑导入预检规则（CI 前置）
+npx dify-dsl-pipe lint --source ./dify-backup
+
+# warning 也视为失败
+npx dify-dsl-pipe lint --source ./dify-backup --strict
 ```
 
 ### 多实例配置文件
@@ -144,7 +193,7 @@ curl -X POST http://localhost:3000/jobs \
 npx dify-dsl-pipe serve --mcp --config dify-pipe.yaml
 ```
 
-MCP 暴露 4 个工具：`list_instances`、`list_apps`、`export_apps`、`import_apps`。
+MCP 暴露 6 个工具：`list_instances`、`list_apps`、`export_apps`、`import_apps`（新增 `publish` 参数）、`migrate_apps`（`yes` 默认 false 只预演）、`diff_apps`（`check` 有漂移时 `isError: true`）。全部返回 PipeReport JSON；出错返回 `{success:false, error, code}` + `isError`。
 
 ---
 
@@ -160,10 +209,11 @@ MCP 暴露 4 个工具：`list_instances`、`list_apps`、`export_apps`、`impor
 
 ### 场景 B：多实例管理 / 跨环境迁移
 
-1. 建议使用配置文件（运行 `init` 或直接生成 `dify-pipe.yaml`）
-2. 收集各实例的地址和 token
-3. 确认迁移方向和冲突策略
-4. 两步流程：先 export，再 import --dry-run 预览，确认后去掉 --dry-run
+1. 用 `init --name <n> --url <u> --token <t>` 非交互建好各 profile（或交互 `init` / 手写 `dify-pipe.yaml`）
+2. 确认迁移方向和冲突策略
+3. 先 `migrate --from <src> --to <dst>` 预演（导出→清洗→dry-run 导入），把 blocking / warning / NOT_PUBLISHED 报告给用户
+4. 用户确认后加 `--yes` 执行；是否 `--publish` 必须由用户拍板（见 grilling 触发词）
+5. 迁移后可用 `diff --profile <dst> --source <workdir>` 复核
 
 ### 场景 C：部署定时自动备份服务
 
@@ -193,15 +243,17 @@ MCP 暴露 4 个工具：`list_instances`、`list_apps`、`export_apps`、`impor
 - 跨版本迁移（Dify 0.x → 1.x）自动切换 Adapter，DSL 格式差异可能引起导入警告，属正常现象
 - **email+password 认证**：Dify ≥ 1.11.2 要求密码 Base64 编码，工具自动处理，无需用户关心；若遇到持续 401 建议改用 `--token`
 - **版本历史文件命名**：命名版本 → `版本名_时间戳.yml`；未命名版本 → `app名_时间戳.yml`（精确到分钟，同天多版本不冲突）
+- **导入即草稿**：import / migrate 后 workflow / advanced-chat 是草稿，线上行为不变；发布要 `--publish`（且需用户确认）
+- **Dify 1.18 导出**：一律走 `format=yaml`；不带 format 会得到 `.ifpkg` zip，工具不使用该格式
 
-## v0.3 预检与 sanitize（迁移可信）
+## 预检与 sanitize（迁移可信）
 
 跨环境迁移的 silent failure 由两层兜底：
 
 - **export sanitize（默认开）**：去掉 file/file-list 变量 default 里跨 workspace 无效的 `local_file` 引用（`upload_file_id`/`uploadedId`），保留 `remote_url` 类 default。`--no-sanitize` 关；`--preserve-local-files` 同 Instance 还原时保留；`--keep-original` 额外写 `.orig`。对齐 Dify PR #37022。
-- **import 预检（dry-run 即跑）**：`LOCAL_FILE_DEFAULT` / `INVALID_VARIABLE_ID` 为 **blocking**（不 `--fix` 则阻断该 app 导入）；`PLUGIN_MISSING` / `DSL_VERSION_MISMATCH` 为 **warning**。import 成功后自动调 `check-dependencies`，缺插件 → warning。
+- **import 预检（dry-run 即跑，lint 离线同源）**：`LOCAL_FILE_DEFAULT` / `INVALID_VARIABLE_ID` 为 **blocking**（不 `--fix` 则阻断该 app 导入）；`PLUGIN_MISSING` / `DSL_VERSION_MISMATCH` / `AGENT_ASSETS_OMITTED` 为 **warning**。import 成功后自动调 `check-dependencies`，缺插件 → warning；Dify 返回的 warnings 透出为 `DIFY_IMPORT_WARNING`。
 - **`--fix`**：删 local 文件 default、给非 UUID 变量 id 换 UUID（变量按 name 引用，换 id 安全）。
-- **`--json` 统一 PipeReport**：`{command, success, summary:{total,blocking,warnings}, items:[{severity,code,app,file,problem,suggestion,location}]}`，Skill/agent 只解析这一种。
+- **`--json` 统一 PipeReport**：`{command, success, summary:{total,blocking,warnings}, stats?, meta?, items:[{severity,code,app,file,problem,suggestion,location,detail}]}`；stdout 只有一个 JSON 对象，日志走 stderr。Skill/agent 只解析这一种。
 - **sanitize/`--fix` 会重新格式化 YAML**：清洗或修复后 DSL 会被重新序列化，手写注释和原始键序会丢失。Dify 导出的 DSL 本身无注释，影响的主要是手改过的 DSL；需保留原件用 `--keep-original`（export）。
 
 ### 告知模板（自动修）
@@ -211,7 +263,14 @@ MCP 暴露 4 个工具：`list_instances`、`list_apps`、`export_apps`、`impor
 - 【问题】blocking/warning 项的人话描述 + 背景（如「file 变量 PO_files 的 default 引用了原 workspace 的文件 id，跨环境会导致 Test Run 卡住」）
 - 【已做】工具自动做了什么 + 文件/节点位置（如「已删除该 default」「已为变量 cv 重新生成 UUID」）
 - 【结果】导入/导出结果（创建/跳过/覆盖/失败计数；blocking 是否清零）
-- 【未动】未自动处理、需用户决策的项（插件缺失、DSL 版本不一致、on-conflict）
+- 【未动】未自动处理、需用户决策的项（插件缺失、DSL 版本不一致、on-conflict、未发布草稿）
+
+### 告知模板（提示类）
+
+- **`AGENT_ASSETS_OMITTED`**（导出/预检/lint 命中，YAML 未携带内嵌 Agent 的 Skill/文件）：「该应用内嵌 Agent 的 Skill / 文件未随 YAML 导出携带，迁移后会缺失。建议在 Dify UI 用 .ifpkg 单独迁移该应用，或导入后手动补齐 Skill/文件。」
+- **`DIFY_IMPORT_WARNING`**（Dify 导入接口返回 warning）：「Dify 返回了导入警告（原始 code/path/message 见 detail），应用已导入但建议核对警告项。」
+- **`AGENT_OVERWRITE_UNSUPPORTED`**（overwrite 遇到同名 Agent 应用）：「Dify 不支持覆盖 Agent 应用，已跳过。需要替换的话，先在 Dify 中删除或改名旧应用再导入。」
+- **`NOT_PUBLISHED`**：「已导入为草稿，发布前 Service API / Web App 不可用」（新建）；「草稿已替换，线上仍运行旧发布版本」（覆盖）。
 
 ### grilling 触发词（一次一问，需用户拍板）
 
@@ -220,7 +279,12 @@ MCP 暴露 4 个工具：`list_instances`、`list_apps`、`export_apps`、`impor
 - **插件缺失**（`PLUGIN_MISSING`）：目标实例缺插件 → 问用户是否已安装 / 从哪安装 / 是否跳过该 app
 - **DSL 版本不一致**（`DSL_VERSION_MISMATCH`）：DSL major 与目标 Dify major 不同 → 问是否仍导入 / 降级 `--full` 对齐
 - **on-conflict**：同名应用已存在 → 问 skip 还是 overwrite，不擅自覆盖
+- **`NOT_PUBLISHED`（必问）**：workflow / advanced-chat 导入后只是草稿 → 问用户是否发布：发布方式是 `--on-conflict overwrite --publish` 重跑（默认 skip 会跳过已存在的应用、不会发布），或在 Dify UI 手动发布；**覆盖场景必须问**——线上仍运行旧发布版本，发布与否直接影响线上行为
+- **`PUBLISH_FAILED`**：导入成功但发布失败 → 如实报告失败原因，问用户如何处理（修复后重发 / 保持草稿）
+- **migrate `--yes`**：预演结束后是否执行导入由用户确认，不自动追加 `--yes`
 - **sanitize 关闭**：用户明确要 `--preserve-local-files`（同 Instance 还原）时确认意图
+
+> 规则：**绝不**在未获用户确认时自动加 `--publish` 或 `--yes`。
 
 > 完整 CLI 参数见 [references/cli.md](references/cli.md)
 > 存储后端详细配置见 [references/storage.md](references/storage.md)

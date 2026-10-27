@@ -1,3 +1,13 @@
+# Agent Skill 本地安装产物（skills/ 是源，.agents/ 是安装的副本）
+.agents/
+skills-lock.json
+
+# 本地工单 / 流水线工作区
+.scratch/
+
+# migrate 命令默认工作目录
+.dify-pipe-migrate/
+
 # docstrata 全部层文档（对内沉淀，本地用，不提交）
 docs/internal/
 docs/prd.md
