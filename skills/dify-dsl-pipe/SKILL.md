@@ -270,6 +270,7 @@ MCP 暴露 6 个工具：`list_instances`、`list_apps`、`export_apps`、`impor
 - **`AGENT_ASSETS_OMITTED`**（导出/预检/lint 命中，YAML 未携带内嵌 Agent 的 Skill/文件）：「该应用内嵌 Agent 的 Skill / 文件未随 YAML 导出携带，迁移后会缺失。建议在 Dify UI 用 .ifpkg 单独迁移该应用，或导入后手动补齐 Skill/文件。」
 - **`DIFY_IMPORT_WARNING`**（Dify 导入接口返回 warning）：「Dify 返回了导入警告（原始 code/path/message 见 detail），应用已导入但建议核对警告项。」
 - **`AGENT_OVERWRITE_UNSUPPORTED`**（overwrite 遇到同名 Agent 应用）：「Dify 不支持覆盖 Agent 应用，已跳过。需要替换的话，先在 Dify 中删除或改名旧应用再导入。」
+- **`DUPLICATE_NAME`**（export 命中，应用重名）：「该应用与其他应用重名，已写入带 id 后缀的文件以免覆盖。建议在 Dify 中改成唯一名称。」
 - **`NOT_PUBLISHED`**：「已导入为草稿，发布前 Service API / Web App 不可用」（新建）；「草稿已替换，线上仍运行旧发布版本」（覆盖）。
 
 ### grilling 触发词（一次一问，需用户拍板）

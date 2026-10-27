@@ -68,7 +68,7 @@ npx dify-dsl-pipe export [options]
 --filter "name:客服"                        # 名称包含"客服"的
 ```
 
-可用 `type` 值：`chat`、`agent-chat`、`completion`、`workflow`、`advanced-chat`
+可用 `type` 值：`chat`、`agent-chat`、`completion`、`workflow`、`advanced-chat`、`agent`（Dify 1.18+）
 
 ---
 

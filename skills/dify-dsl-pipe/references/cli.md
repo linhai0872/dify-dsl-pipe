@@ -42,6 +42,8 @@
 | `--json` | `false` | JSON 格式输出（PipeReport 信封：`{command,success,summary,items[]}`） |
 | `--verbose` | `false` | 详细日志 |
 
+> 多个应用落到同一路径（重名，不区分大小写）时，先创建的保留原名，其余文件名加 `__<id 前 8 位>` 后缀并报 `DUPLICATE_NAME`(warning)。
+
 ---
 
 ## import
@@ -76,6 +78,8 @@
 | `--verbose` | `false` | 详细日志 |
 
 > 导入的 workflow / advanced-chat 默认**只写草稿**；新建发布前 Service API / Web App 不可用，覆盖时线上仍运行旧发布版本。是否发布由用户决定（`NOT_PUBLISHED` → 必问），不自动追加 `--publish`。
+
+> Dify 1.18 不支持覆盖已有 Agent 应用：`--on-conflict overwrite` 遇到同名 Agent 应用时跳过并报 `AGENT_OVERWRITE_UNSUPPORTED`(warning)，计入 skipped，同批其他应用照常覆盖。
 
 ---
 
