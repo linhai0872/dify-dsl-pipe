@@ -103,7 +103,7 @@
 | `--git-*` | — | 同 export 的 Git 参数 |
 | `-o, --out <path>` | `./dify-backup` | 本地输出目录 |
 | `--pattern <pattern>` | `by-type` | 文件命名预设 |
-| `--webhook <url>` | — | 任务完成通知地址（Slack/企业微信/钉钉/通用 HTTP POST） |
+| `--webhook <url>` | — | 任务完成通知地址（Slack/企业微信/钉钉/飞书/通用 HTTP POST） |
 | `--json` | `false` | JSON 格式输出 |
 | `--verbose` | `false` | 详细日志 |
 

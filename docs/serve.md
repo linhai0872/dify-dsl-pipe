@@ -115,7 +115,17 @@ curl -X DELETE http://localhost:3000/jobs/<job-id>
 
 ## Webhook 通知
 
-服务支持在任务完成时推送通知，兼容 Slack、企业微信、钉钉及任何接受 HTTP POST 的服务：
+服务支持在任务完成时推送通知。根据 Webhook 地址自动选择消息格式：
+
+| 渠道 | 识别的地址 | 消息体 |
+|------|-----------|--------|
+| 企业微信 | `qyapi.weixin.qq.com` | `{"msgtype":"text","text":{"content":"..."}}` |
+| 钉钉 | `oapi.dingtalk.com` | `{"msgtype":"text","text":{"content":"..."}}` |
+| 飞书 / Lark | `open.feishu.cn` / `open.larksuite.com` | `{"msg_type":"text","content":{"text":"..."}}` |
+| Slack | `hooks.slack.com` | `{"text":"..."}` |
+| 其他 | 任意 HTTP POST 地址 | `{"text":"...","content":"..."}` |
+
+发送失败（HTTP 非 2xx、跳转，或企业微信 / 钉钉 / 飞书响应体里的错误码非 0）会在服务日志中输出警告，日志里的 Webhook 地址只保留域名。钉钉机器人的「加签」安全设置暂不支持，请改用「自定义关键词」或「IP 地址段」；使用关键词时，消息以「导出完成」「导入完成」「任务失败」开头。
 
 ```bash
 # 企业微信

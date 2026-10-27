@@ -5,7 +5,7 @@ compatibility: "Uses npx dify-dsl-pipe — zero install required, npx handles it
 license: MIT
 metadata:
   author: linhai0872
-  version: "0.4.0"
+  version: "0.4.1"
   tags: "dify,backup,migration,export,import,mcp,cli"
   homepage: "https://github.com/linhai0872/dify-dsl-pipe"
   npm: "https://www.npmjs.com/package/dify-dsl-pipe"
