@@ -53,6 +53,8 @@ npx dify-dsl-pipe export [options]
 
 `flat` 和 `by-type` 为覆盖写模式（无日期），适合配合 git 做版本管理；其余预设为归档模式（含日期），每次导出新增文件。版本历史（`_versions/` 子目录）始终使用版本创建时间戳，命名版本保留版本名，未命名版本以 app 名+时间戳区分。
 
+多个应用落到同一路径（重名，不区分大小写）时，先创建的保留原名，其余加 `__<id 前 8 位>` 后缀（如 `AppName__a561f838.yml`），并报 `DUPLICATE_NAME`。
+
 运行 `npx dify-dsl-pipe presets` 查看完整列表。
 
 ### 过滤表达式（--filter）
@@ -323,7 +325,7 @@ npx dify-dsl-pipe presets
 | `AGENT_OVERWRITE_UNSUPPORTED` | warning | `--on-conflict overwrite` 遇到同名 Agent 应用（1.18+）：Dify 不支持覆盖，已跳过，计入 skipped |
 | `NOT_PUBLISHED` | info | 应用已导入为草稿未发布：新建→发布前 Service API / Web App 不可用；覆盖→线上仍运行旧发布版本 |
 | `PUBLISH_FAILED` | warning | 导入成功但发布失败（应用保留已导入状态，计入 stats.publishFailed，命令 success=false） |
-| `DUPLICATE_NAME` | warning | diff 中同一侧重名（不区分大小写），该名字不参与比较 |
+| `DUPLICATE_NAME` | warning | export：与其他应用重名（不区分大小写），文件名加 `__<id 前 8 位>` 后缀，先创建的保留原名；diff：同一侧重名，该名字不参与比较 |
 | `DRIFT_ONLY_IN_BACKUP` | info | 仅备份中存在的应用 |
 | `DRIFT_ONLY_ONLINE` | info | 仅线上存在的应用 |
 | `DRIFT_CONTENT` | info | 两侧都有但内容不同（location 列前 5 个变化路径） |
