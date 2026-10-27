@@ -154,8 +154,12 @@ export class DifyClient {
     return this.adapter.importAppDSL(dslContent, opts);
   }
 
-  async checkImportDependencies(importId: string): Promise<{ leaked: unknown[] }> {
-    return this.adapter.checkImportDependencies(importId);
+  async checkImportDependencies(appId: string): Promise<{ leaked: unknown[] }> {
+    return this.adapter.checkImportDependencies(appId);
+  }
+
+  async publishWorkflow(appId: string): Promise<void> {
+    return this.adapter.publishWorkflow(appId);
   }
 
   async getWorkflowVersions(appId: string): Promise<WorkflowVersion[]> {

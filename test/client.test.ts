@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { resolveAdapterType } from "../src/core/client.js";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { DifyClient, resolveAdapterType } from "../src/core/client.js";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 // 版本 → adapter 选择边界。
 // 实测（test/compat，2026-08-25）：
@@ -28,5 +32,70 @@ describe("resolveAdapterType", () => {
 
   it("无法解析的版本按 modern 处理", () => {
     expect(resolveAdapterType("unknown")).toBe("modern");
+  });
+});
+
+describe("DifyClient passthrough", () => {
+  function jsonResponse(body: unknown) {
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "content-type": "application/json", "x-version": "1.18.0" },
+    });
+  }
+
+  async function connectedClient() {
+    const client = new DifyClient({
+      baseUrl: "http://x/console/api",
+      token: "t",
+      timeout: 30,
+      maxRetries: 0,
+    });
+    await client.connect();
+    return client;
+  }
+
+  it("publishWorkflow POSTs /apps/{id}/workflows/publish", async () => {
+    const fetchMock = vi.fn((_url: unknown) =>
+      Promise.resolve(jsonResponse({ result: "success" })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = await connectedClient();
+    await client.publishWorkflow("app7");
+
+    const publishCall = fetchMock.mock.calls.find(([u]) =>
+      String(u).includes("/apps/app7/workflows/publish"),
+    );
+    expect(publishCall).toBeDefined();
+  });
+
+  it("importAppDSL returns the new shape with warnings", async () => {
+    const warnings = [{ code: "w", message: "m" }];
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/apps/imports")) {
+        return jsonResponse({ app_id: "app1", status: "completed-with-warnings", warnings });
+      }
+      return jsonResponse({ data: [], total: 0, has_more: false });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = await connectedClient();
+    const result = await client.importAppDSL("dsl-yaml");
+
+    expect(result.appId).toBe("app1");
+    expect(result.status).toBe("completed-with-warnings");
+    expect(result.warnings).toEqual(warnings);
+  });
+
+  it("checkImportDependencies passes through to the adapter", async () => {
+    const fetchMock = vi.fn((_url: unknown) =>
+      Promise.resolve(jsonResponse({ leaked_dependencies: [{ name: "p" }] })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = await connectedClient();
+    const result = await client.checkImportDependencies("app9");
+
+    expect(result.leaked).toEqual([{ name: "p" }]);
   });
 });

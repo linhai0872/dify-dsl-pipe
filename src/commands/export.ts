@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { exportApps } from "../core/exporter.js";
-import { setupPipe, type PipeContext } from "../core/runner.js";
+import { setupPipe } from "../core/runner.js";
+import { parseFilterExpr } from "../core/source.js";
 import { PipeError } from "../core/errors.js";
 import { buildReport } from "../core/dsl-rules.js";
 import type { RuleIssue } from "../core/report.js";
@@ -67,7 +68,7 @@ export function registerExportCommand(program: Command) {
           gitBranch: opts.gitBranch,
         });
 
-        const filter = parseFilter(opts.filter);
+        const filter = parseFilterExpr(opts.filter);
         const baseExportOpts = {
           ...ctx.exportOpts,
           includeSecret: opts.includeSecret ?? ctx.exportOpts.includeSecret,
@@ -86,7 +87,7 @@ export function registerExportCommand(program: Command) {
         let totalFailed = 0;
         let totalDuration = 0;
         let hasError = false;
-        const sanitizeIssues: RuleIssue[] = [];
+        const allIssues: RuleIssue[] = [];
 
         if (opts.allWorkspaces) {
           const pattern = opts.pattern !== "by-type" ? opts.pattern : "by-workspace";
@@ -105,7 +106,7 @@ export function registerExportCommand(program: Command) {
               totalSuccess += result.success.length;
               totalFailed += result.failed.length;
               totalDuration += result.duration;
-              for (const e of result.success) sanitizeIssues.push(...(e.issues ?? []));
+              for (const e of result.success) allIssues.push(...(e.issues ?? []));
               if (result.failed.length) hasError = true;
             } catch (e) {
               const msg = e instanceof Error ? e.message : String(e);
@@ -121,12 +122,19 @@ export function registerExportCommand(program: Command) {
           totalSuccess = result.success.length;
           totalFailed = result.failed.length;
           totalDuration = result.duration;
-          for (const e of result.success) sanitizeIssues.push(...(e.issues ?? []));
+          for (const e of result.success) allIssues.push(...(e.issues ?? []));
           hasError = result.failed.length > 0;
         }
 
         if (opts.json) {
-          console.log(JSON.stringify(buildReport("export", sanitizeIssues, !hasError)));
+          console.log(
+            JSON.stringify(
+              buildReport("export", allIssues, !hasError, {
+                exported: totalSuccess,
+                failed: totalFailed,
+              })
+            )
+          );
         } else {
           console.error("");
           log.success(
@@ -134,7 +142,16 @@ export function registerExportCommand(program: Command) {
             `耗时 ${formatDuration(totalDuration)}`
           );
           if (totalFailed) log.warn(`${totalFailed} 个应用导出失败`);
-          if (sanitizeIssues.length) log.info(`已清洗 ${sanitizeIssues.length} 项跨 workspace 无效的 local 文件 default`);
+
+          const sanitizeCount = allIssues.filter((i) => i.code === "LOCAL_FILE_DEFAULT").length;
+          if (sanitizeCount) {
+            log.info(`已清洗 ${sanitizeCount} 项跨 workspace 无效的 local 文件 default`);
+          }
+
+          const agentAssetCount = allIssues.filter((i) => i.code === "AGENT_ASSETS_OMITTED").length;
+          if (agentAssetCount) {
+            log.warn(`${agentAssetCount} 个应用含内嵌 Agent 且 Skill/文件未随 YAML 携带，导入后需手动补齐`);
+          }
         }
 
         process.exit(hasError ? 1 : 0);
@@ -148,30 +165,4 @@ export function registerExportCommand(program: Command) {
         process.exit(1);
       }
     });
-}
-
-function parseFilter(expr?: string) {
-  if (!expr) return undefined;
-
-  const filter: { names?: string[]; tags?: string[]; types?: string[] } = {};
-
-  for (const part of expr.split(",")) {
-    const [key, ...valueParts] = part.split(":");
-    const value = valueParts.join(":");
-    if (!value) continue;
-
-    switch (key.trim().toLowerCase()) {
-      case "type":
-        (filter.types ??= []).push(value.trim());
-        break;
-      case "tag":
-        (filter.tags ??= []).push(value.trim());
-        break;
-      case "name":
-        (filter.names ??= []).push(value.trim());
-        break;
-    }
-  }
-
-  return Object.keys(filter).length ? filter : undefined;
 }

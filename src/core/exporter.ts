@@ -1,13 +1,13 @@
 import { PassThrough } from "node:stream";
-import { createRequire } from "node:module";
+import { ZipArchive } from "archiver";
 import type { DifyClient } from "./client.js";
 import type { DifyApp, AppFilter, ExportResult, ExportedApp, PipeState } from "./types.js";
 import type { RuleIssue } from "./report.js";
 import type { StorageBackend } from "../storage/interface.js";
 import type { ExportOptions } from "../config/types.js";
 import { buildFilePath, sanitize, resolvePattern } from "../utils/naming.js";
-import { sanitizeExportDSL } from "./dsl-rules.js";
-import { log, formatDuration, formatSize } from "../utils/logger.js";
+import { sanitizeExportDSL, checkAgentAssets } from "./dsl-rules.js";
+import { log, formatSize } from "../utils/logger.js";
 
 /** 按 export opts 决定是否清洗 DSL；返回最终内容与清洗 info issues。 */
 function applySanitize(
@@ -98,7 +98,7 @@ export async function exportApps(
     const zipPath = `dify-backup_${new Date().toISOString().slice(0, 10)}.zip`;
     log.info(`打包为 ${zipPath}...`);
     const zipBuffer = await createZipBuffer(success);
-    await storage.write(zipPath, zipBuffer.toString("base64"));
+    await storage.write(zipPath, zipBuffer);
     log.success(`ZIP 已写入: ${zipPath} (${formatSize(zipBuffer.length)})`);
   }
 
@@ -119,9 +119,7 @@ async function createZipBuffer(exported: ExportedApp[]): Promise<Buffer> {
     passthrough.on("end", () => resolve(Buffer.concat(chunks)));
     passthrough.on("error", reject);
 
-    const _require = createRequire(import.meta.url);
-    const archiverFactory = _require("archiver") as (format: string, opts?: Record<string, unknown>) => import("stream").Transform & { append(data: string, opts: { name: string }): void; finalize(): Promise<void> };
-    const archive = archiverFactory("zip", { zlib: { level: 9 } });
+    const archive = new ZipArchive({ zlib: { level: 9 } });
     archive.on("error", reject);
     archive.pipe(passthrough);
 
@@ -161,7 +159,14 @@ async function exportSingleApp(
   }
   await storage.write(filePath, curDsl);
 
-  const exported: ExportedApp = { app, dslContent: curDsl, filePath, issues: curIssues };
+  // 对最终 DSL 跑 AGENT_ASSETS_OMITTED（不阻断，仅报告）
+  const agentIssues = checkAgentAssets(curDsl, { app: app.name, file: filePath });
+  const exported: ExportedApp = {
+    app,
+    dslContent: curDsl,
+    filePath,
+    issues: [...curIssues, ...agentIssues],
+  };
 
   // 导出版本历史
   if (opts.includeVersionHistory && ["workflow", "advanced-chat"].includes(app.mode)) {

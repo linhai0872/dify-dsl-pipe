@@ -1,16 +1,136 @@
 import type { Command } from "commander";
-import { writeFileSync, existsSync } from "node:fs";
+import { writeFileSync, existsSync, readFileSync, chmodSync } from "node:fs";
 import { resolve } from "node:path";
-import { stringify as toYaml } from "yaml";
+import { stringify as toYaml, parse as parseYaml } from "yaml";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
+import { PipeError } from "../core/errors.js";
+import { log, setJsonMode } from "../utils/logger.js";
+
+interface InitOpts {
+  name?: string;
+  url?: string;
+  token?: string;
+  email?: string;
+  password?: string;
+  workspace?: string;
+  storagePath?: string;
+  out: string;
+  force?: boolean;
+  json?: boolean;
+}
 
 export function registerInitCommand(program: Command) {
   program
     .command("init")
-    .description("交互式创建配置文件")
+    .description("创建配置文件（交互向导，或 --name 非交互）")
+    .option("--name <name>", "实例/Profile 名称（提供后进入非交互模式）")
+    .option("--url <url>", "Dify Console API 地址")
+    .option("--token <token>", "Access Token")
+    .option("--email <email>", "登录邮箱")
+    .option("--password <password>", "登录密码")
+    .option("--workspace <id>", "Workspace ID")
+    .option("--storage-path <dir>", "本地存储路径（默认 ./dify-backup/<name>）")
     .option("-o, --out <path>", "输出路径", "dify-pipe.yaml")
-    .action(async (opts) => {
+    .option("--force", "同名 instance/profile 已存在时覆盖")
+    .option("--json", "JSON 格式输出")
+    .action(async (opts: InitOpts) => {
+      if (opts.name) return runNonInteractive(opts);
+      return runInteractive(opts);
+    });
+}
+
+async function runNonInteractive(opts: InitOpts) {
+  if (opts.json) setJsonMode(true);
+  const outPath = resolve(opts.out);
+
+  try {
+    const name = opts.name!;
+    if (!opts.url) {
+      throw new PipeError("ERR_CONFIG_INVALID", "缺少 --url（Dify Console API 地址）");
+    }
+    const hasToken = !!opts.token;
+    const hasEmailPassword = !!opts.email && !!opts.password;
+    if (!hasToken && !hasEmailPassword) {
+      throw new PipeError(
+        "ERR_CONFIG_INVALID",
+        "缺少认证信息：请提供 --token，或 --email 与 --password"
+      );
+    }
+
+    // 读取已有配置（保留其他 instance/profile/defaults）
+    let raw: Record<string, unknown> = {};
+    if (existsSync(outPath)) {
+      const parsed = parseYaml(readFileSync(outPath, "utf-8"));
+      if (parsed && typeof parsed === "object") {
+        raw = parsed as Record<string, unknown>;
+      }
+    }
+
+    const instances = Array.isArray(raw.instances)
+      ? (raw.instances as Record<string, unknown>[])
+      : [];
+    const profiles =
+      raw.profiles && typeof raw.profiles === "object"
+        ? (raw.profiles as Record<string, unknown>)
+        : {};
+
+    const instExists = instances.some((i) => i && i.name === name);
+    const profileExists = name in profiles;
+    if ((instExists || profileExists) && !opts.force) {
+      throw new PipeError(
+        "ERR_CONFIG_INVALID",
+        `实例或 profile "${name}" 已存在，使用 --force 覆盖`
+      );
+    }
+
+    const instance: Record<string, unknown> = { name, url: opts.url };
+    if (hasToken) {
+      instance.token = opts.token;
+    } else {
+      instance.email = opts.email;
+      instance.password = opts.password;
+    }
+
+    const profile: Record<string, unknown> = {
+      instance: name,
+      storage: {
+        type: "local",
+        path: opts.storagePath ?? `./dify-backup/${name}`,
+      },
+    };
+    if (opts.workspace) profile.workspace = opts.workspace;
+
+    const rest = instances.filter((i) => i && i.name !== name);
+    raw.instances = [...rest, instance];
+    raw.profiles = { ...profiles, [name]: profile };
+
+    // 含凭据：仅所有者可读写。已有文件先收紧权限再写（mode 只对新建文件生效）
+    if (existsSync(outPath)) chmodSync(outPath, 0o600);
+    writeFileSync(outPath, toYaml(raw, { indent: 2 }), { encoding: "utf-8", mode: 0o600 });
+
+    if (opts.json) {
+      console.log(JSON.stringify({ success: true, path: outPath }));
+    } else {
+      log.success(`配置已写入 ${pc.green(outPath)}`);
+      log.warn("配置文件包含凭据，请勿提交到代码仓库");
+    }
+    process.exit(0);
+  } catch (e) {
+    if (opts.json) {
+      const pe =
+        e instanceof PipeError
+          ? e.toJSON()
+          : { success: false, error: e instanceof Error ? e.message : String(e) };
+      console.log(JSON.stringify(pe));
+    } else {
+      log.error(e instanceof Error ? e.message : String(e));
+    }
+    process.exit(1);
+  }
+}
+
+async function runInteractive(opts: InitOpts) {
       const outPath = resolve(opts.out);
 
       if (existsSync(outPath)) {
@@ -145,7 +265,6 @@ export function registerInitCommand(program: Command) {
       writeFileSync(outPath, toYaml(config, { indent: 2 }), "utf-8");
 
       p.outro(`配置已写入 ${pc.green(outPath)}\n  运行 ${pc.cyan("npx dify-dsl-pipe export --profile " + instance.name)} 开始导出`);
-    });
 }
 
 function buildInstance(data: Record<string, unknown>) {

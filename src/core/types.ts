@@ -78,7 +78,11 @@ export interface ImportResult {
   skipped: { name: string; reason: string }[];
   overwritten: { name: string; appId: string }[];
   failed: { name: string; error: string }[];
-  /** 预检 + check-dependencies 产出的 issue（blocking/warning/info）。 */
+  /** 发布成功的应用（仅 --publish 时）。 */
+  published: { name: string; appId: string }[];
+  /** 发布失败的应用（导入仍计入 created/overwritten）。 */
+  publishFailed: { name: string; error: string }[];
+  /** 预检 + check-dependencies + 发布/未发布产出的 issue（blocking/warning/info）。 */
   issues: RuleIssue[];
   duration: number;
 }

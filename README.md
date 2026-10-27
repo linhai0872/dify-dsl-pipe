@@ -23,12 +23,14 @@ Dify 应用 DSL 的一站式管道工具，涵盖导出、导入、备份、迁�
 
 <table>
 <tr><td><b>导出 & 备份</b></td><td>批量导出全部应用 DSL，支持按类型、标签、名称灵活过滤，并提供增量导出模式，只同步有变更的应用。</td></tr>
-<tr><td><b>导入 & 迁移</b></td><td>从备份目录还原，或将应用跨实例迁移。提供预览模式（dry-run）和同名冲突策略，迁移前看清楚再执行。</td></tr>
+<tr><td><b>导入 & 迁移</b></td><td>从备份目录还原，或一条命令跨实例迁移（导出 → 清洗 → 预演 → 导入）。默认预演不写入，确认后加 <code>--yes</code> 执行，可选 <code>--publish</code> 直接发布。</td></tr>
+<tr><td><b>备份 ↔ 线上对比</b></td><td><code>diff</code> 用语义投影比较备份与线上差异（忽略排序、坐标等噪声），<code>--check</code> 发现漂移即退出码 1，可直接挂 CI。</td></tr>
+<tr><td><b>离线检查</b></td><td><code>lint</code> 不连 Dify，对备份目录跑导入预检规则（含 Agent 资源缺失提示），提前在 CI 拦住无法导入的 DSL。</td></tr>
 <tr><td><b>多种存储后端</b></td><td>支持本地目录、Git 仓库（自动 commit）、以及 AWS S3 及所有 S3 兼容存储（阿里云 OSS / 腾讯 COS / 火山云 TOS / MinIO / Cloudflare R2）。</td></tr>
 <tr><td><b>多实例管理</b></td><td>通过配置文件统一管理生产、测试、多租户等多套 Dify 环境，用 <code>--profile</code> 一键切换目标实例。</td></tr>
 <tr><td><b>定时备份服务</b></td><td>serve 模式以轻量 HTTP API 服务运行，内置 cron 定时任务管理，支持 Slack、企业微信、钉钉等 Webhook 通知。</td></tr>
 <tr><td><b>MCP Server</b></td><td>作为标准 MCP Server 暴露操作接口，Claude Code、Cursor、OpenCode 等 AI 工具可直接通过工具调用管理 Dify 应用。</td></tr>
-<tr><td><b>版本自动适配</b></td><td>自动检测 Dify 版本并切换对应 Adapter，无需手动配置。0.12 ~ 1.16 各版本的导入导出均经真实环境回归验证；0.12 之前的版本支持导出备份。</td></tr>
+<tr><td><b>版本自动适配</b></td><td>自动检测 Dify 版本并切换对应 Adapter，无需手动配置。0.12 ~ 1.16 各版本的导入导出均经真实环境回归验证；1.17 / 1.18 已适配（1.18 经 <code>format=yaml</code> 导出、导入 warnings 透出、可选发布），有单元测试覆盖，真实环境回归验证进行中；0.12 之前的版本支持导出备份。</td></tr>
 </table>
 
 ---
@@ -53,9 +55,23 @@ npx dify-dsl-pipe import --url https://target-dify.com/console/api --token TOKEN
 
 # 交互式初始化配置文件
 npx dify-dsl-pipe init
+
+# 一条命令跨实例迁移：默认预演，确认后加 --yes 执行
+npx dify-dsl-pipe init --name prod --url https://dify.prod.com/console/api --token PROD_TOKEN
+npx dify-dsl-pipe init --name staging --url https://dify.staging.com/console/api --token STAGING_TOKEN
+npx dify-dsl-pipe migrate --from prod --to staging          # 预演
+npx dify-dsl-pipe migrate --from prod --to staging --yes    # 执行导入
+
+# 对比备份与线上差异；--check 发现漂移即退出码 1（CI 用）
+npx dify-dsl-pipe diff --profile prod --source ./dify-backup --check
+
+# 离线检查备份目录能否干净导入
+npx dify-dsl-pipe lint --source ./dify-backup
 ```
 
 > `--url` 需指向 Console API，地址以 `/console/api` 结尾。
+
+> 导入（`import` / `migrate`）的 workflow / advanced-chat 应用默认**只写入草稿**，目标实例的 Service API / Web App 不会立即生效；加 `--publish` 在导入后自动发布（覆盖导入时线上仍运行旧发布版本，发布后才切换）。
 
 ### 方式二：通过 Agent Skill 使用
 
@@ -78,7 +94,7 @@ Skill 会识别意图、补充缺失信息，并自动组装命令执行，全�
 
 | 文档 | 内容 |
 |------|------|
-| [CLI 参数参考](docs/cli-reference.md) | export / import / serve 所有参数详表 |
+| [CLI 参数参考](docs/cli-reference.md) | export / import / migrate / diff / lint / serve 所有参数详表 |
 | [存储后端配置](docs/storage.md) | local / git / MinIO / AWS S3 / Cloudflare R2 / 阿里云 OSS / 腾讯云 COS / 火山云 TOS |
 | [配置文件参考](docs/config-file.md) | dify-pipe.yaml 完整字段说明 |
 | [定时备份服务](docs/serve.md) | serve 模式、HTTP API 端点、cron 任务管理 |

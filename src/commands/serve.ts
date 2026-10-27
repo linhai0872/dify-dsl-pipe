@@ -1,7 +1,6 @@
 import type { Command } from "commander";
 import { serve } from "@hono/node-server";
 import { setupPipe } from "../core/runner.js";
-import { PipeError } from "../core/errors.js";
 import { createApi, setWebhookUrl, stopAllJobs, type ServeContext, type NotificationConfig } from "../serve/api.js";
 import { startMcpServer } from "../serve/mcp.js";
 import { log, setJsonMode, setLogLevel } from "../utils/logger.js";
@@ -89,6 +88,7 @@ export function registerServeCommand(program: Command) {
             clients: ctx.clients,
             storage: ctx.storage,
             exportOpts: ctx.exportOpts,
+            config: ctx.config,
           });
           return;
         }

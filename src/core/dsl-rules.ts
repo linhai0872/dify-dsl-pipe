@@ -1,14 +1,16 @@
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { randomUUID } from "node:crypto";
 import semver from "semver";
-import type { IssueCode, RuleIssue, PipeReport } from "./report.js";
+import type { RuleIssue } from "./report.js";
+
+// buildReport 移至 report.ts（信封归一处），此处再导出保持现有 import 兼容（D6 单点）。
+export { buildReport } from "./report.js";
 
 // ---- 共用规则常量（对齐 Dify PR #37022）----
 // 真实样本：Start 节点 data.variables[] 里 type=file/file-list 的变量带 default；
 // features.file_upload.transfer_methods（复数列表）与 code 节点代码字面量均非清洗目标。
 const FILE_VARIABLE_TYPES = new Set(["file", "file-list"]);
 const LOCAL_FILE_ID_KEYS = ["upload_file_id", "uploadedId"] as const;
-const LOCAL_FILE_TRANSFER_METHODS = new Set(["local_file"]);
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -93,6 +95,74 @@ function locStr(loc: FileVarLoc): string {
   const node = loc.nodeId ?? `#${loc.nodeIndex}`;
   const v = loc.varName ?? `#${loc.varIndex}`;
   return `graph.nodes[${node}].data.variables[${v}]`;
+}
+
+// ============ 共用规则：内嵌 Agent 资源缺失（Dify 1.18）============
+
+// Dify 1.18 YAML 导出的内嵌 Agent 配置只带引用：agent_packages.<key>.omitted_assets[]
+// 列出被丢弃的 Skill/文件，YAML 导入后缺失 → warning，提示走 .ifpkg。
+const ASSET_KIND_LABELS: Record<string, string> = {
+  skill: "Skill",
+  file: "文件",
+};
+
+interface OmittedAsset {
+  kind?: unknown;
+  name?: unknown;
+}
+
+/**
+ * 检测顶层 agent_packages 中 omitted_assets 非空的包 → AGENT_ASSETS_OMITTED（warning）。
+ * export 后、import 预检、lint 共用（D6 单点）。
+ * 接受 YAML 字符串或已解析的 doc；YAML 不可解析返回 []，不抛。
+ */
+export function checkAgentAssets(
+  dsl: unknown, // string (YAML 文本) 或已解析的 doc
+  ctx: { app?: string; file?: string } = {}
+): RuleIssue[] {
+  let doc: unknown = dsl;
+  if (typeof dsl === "string") {
+    try {
+      doc = parseYaml(dsl);
+    } catch {
+      return [];
+    }
+  }
+  const packages = (doc as Record<string, unknown> | undefined)?.agent_packages;
+  if (!packages || typeof packages !== "object" || Array.isArray(packages)) return [];
+
+  const issues: RuleIssue[] = [];
+  for (const [key, pkg] of Object.entries(packages as Record<string, unknown>)) {
+    const omitted = (pkg as Record<string, unknown> | undefined)?.omitted_assets;
+    if (!Array.isArray(omitted) || !omitted.length) continue;
+
+    // 按 kind 聚合数量与名称，如「1 个Skill（web-search）」「2 个文件（a、b）」
+    const byKind = new Map<string, { count: number; names: string[] }>();
+    for (const raw of omitted as OmittedAsset[]) {
+      const kind = typeof raw?.kind === "string" ? raw.kind : "未知资源";
+      const bucket = byKind.get(kind) ?? { count: 0, names: [] };
+      bucket.count += 1;
+      if (typeof raw?.name === "string" && raw.name) bucket.names.push(raw.name);
+      byKind.set(kind, bucket);
+    }
+    const parts = [...byKind.entries()].map(([kind, { count, names }]) => {
+      const label = ASSET_KIND_LABELS[kind] ?? kind;
+      const list = names.length ? `（${names.join("、")}）` : "";
+      return `${count} 个${label}${list}`;
+    });
+
+    issues.push({
+      severity: "warning",
+      code: "AGENT_ASSETS_OMITTED",
+      app: ctx.app,
+      file: ctx.file,
+      problem: `内嵌 Agent ${key} 的 ${parts.join("、")} 未随 YAML 携带，导入后缺失`,
+      suggestion:
+        "在 Dify UI 用 .ifpkg 单独迁移该应用，或导入后手动补齐 Skill/文件",
+      location: `agent_packages.${key}`,
+    });
+  }
+  return issues;
 }
 
 // ============ Export 侧：sanitize ============
@@ -303,27 +373,12 @@ export function preflightImportDSL(
     }
   }
 
+  // 5) 内嵌 Agent 资源未随 YAML 携带（1.18）— warning，不阻断、fix 不改
+  issues.push(...checkAgentAssets(doc, { app: opts.app, file: opts.file }));
+
   return {
     issues,
     fixedDsl: opts.fix && modified ? stringifyYaml(doc) : undefined,
     modified,
-  };
-}
-
-/** 汇总 issues 为 PipeReport。 */
-export function buildReport(
-  command: string,
-  items: RuleIssue[],
-  success = true
-): PipeReport {
-  return {
-    command,
-    success,
-    summary: {
-      total: items.length,
-      blocking: items.filter((i) => i.severity === "blocking").length,
-      warnings: items.filter((i) => i.severity === "warning").length,
-    },
-    items,
   };
 }

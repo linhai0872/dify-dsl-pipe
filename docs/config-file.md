@@ -10,6 +10,23 @@
 npx dify-dsl-pipe export --profile prod -c /path/to/dify-pipe.yaml
 ```
 
+### `init` 非交互模式（upsert）
+
+带 `--name` 即进入非交互模式，适合脚本化与 migrate 前置准备：
+
+```bash
+npx dify-dsl-pipe init --name prod --url https://dify.prod.com/console/api --token TOKEN
+npx dify-dsl-pipe init --name staging --url https://dify.staging.com/console/api \
+  --email admin@example.com --password PASS --storage-path ./backup/staging
+```
+
+- 读取已有配置文件并 **upsert**：写入同名 `instance` 与同名 `profile`（storage 为 local，默认 `./dify-backup/<name>`，可用 `--storage-path` 改）。
+- 同名已存在且不带 `--force` → `ERR_CONFIG_INVALID`，文件不变；带 `--force` 覆盖。
+- 不连接 Dify、不修改 `.gitignore`。参数缺失（无 url、token 与 email/password 都缺）→ `ERR_CONFIG_INVALID`。
+- `-o` 指定输出配置文件路径（默认 `dify-pipe.yaml`）。
+
+> **配置文件包含凭据（token / 密码），请勿提交到版本库。**
+
 ---
 
 ## 完整结构

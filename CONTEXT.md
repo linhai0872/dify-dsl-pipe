@@ -31,12 +31,28 @@ _Avoid_: config, preset, environment
 _Avoid_: destination, target, output
 
 **Adapter**:
-针对不同 Dify 版本的 API 兼容层。Legacy（0.6.0~0.15.3）和 Modern（1.0.0+）两套。
+针对不同 Dify 版本的 API 兼容层。Legacy（< 0.12.0，仅导出备份，无 DSL 导入 API）和 Modern（≥ 0.12.0）两套。
 _Avoid_: driver, connector, plugin
 
 **Naming Pattern**:
 导出文件的路径模板字符串，使用 `{name}`, `{type}`, `{tags}`, `{date}` 等变量。
 _Avoid_: template, format, schema
+
+**Migrate**:
+一条命令完成跨实例迁移：连接目标 →（可选）从源实例导出到工作目录 → 对工作目录跑导入预演 → 确认后执行导入。默认预演不写入，`--yes` 才发导入请求。
+_Avoid_: sync, promote, copy
+
+**Drift**:
+备份 DSL 与线上应用（或两份备份）之间的语义差异。`diff` 命令报告 `DRIFT_ONLY_IN_BACKUP` / `DRIFT_ONLY_ONLINE` / `DRIFT_CONTENT`，`--check` 下存在 Drift 即退出码 1。
+_Avoid_: diff, change, delta
+
+**Semantic Projection**:
+diff 比较前对两侧 DSL 做的归一化：删除版本/坐标/选中态等噪声字段、secret 变量去值、知识库 id 归一化为占位、节点/边按 id 排序，使比较有语义意义而非逐字节。`--full` 跳过投影做整文档比较。
+_Avoid_: normalize, canonicalize, transform
+
+**Publish**:
+将已导入的 workflow / advanced-chat 草稿发布为线上版本（`POST /apps/{id}/workflows/publish`）。导入默认只写草稿；`--publish` 在导入后自动发布，覆盖导入时线上仍运行旧发布版本直到发布成功。Legacy（< 0.12）不支持。
+_Avoid_: deploy, release, activate
 
 ### 内部架构
 
@@ -47,6 +63,10 @@ _Avoid_: orchestrator, engine, core
 **PipeError**:
 带机器可解析 error code（`ERR_AUTH_FAILED`、`ERR_STORAGE_CONNECT_FAILED` 等）的错误类型。`--json` 模式下输出 `{success, error, code}` 结构，供 Skill 和 MCP 客户端解析和重试。
 _Avoid_: exception, fault
+
+**PipeReport**:
+所有管道命令（export / import / lint / migrate / diff）`--json` 模式的统一输出信封：`{command, success, summary:{total,blocking,warnings}, stats?, meta?, items[]}`。items 每条带 severity（blocking/warning/info）与稳定 code（`NOT_PUBLISHED`、`DRIFT_CONTENT` 等）。命令整体抛错时改用 PipeError 信封。
+_Avoid_: result, response, output
 
 ### 用户入口
 

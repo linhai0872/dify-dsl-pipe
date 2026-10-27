@@ -1,4 +1,5 @@
 export type PipeErrorCode =
+  | "ERR_FORBIDDEN"
   | "ERR_NO_INSTANCE"
   | "ERR_INSTANCE_NOT_FOUND"
   | "ERR_AUTH_FAILED"
@@ -11,7 +12,8 @@ export type PipeErrorCode =
   | "ERR_EXPORT_FAILED"
   | "ERR_IMPORT_FAILED"
   | "ERR_WORKSPACE_SWITCH_FAILED"
-  | "ERR_VERSION_UNSUPPORTED";
+  | "ERR_VERSION_UNSUPPORTED"
+  | "ERR_UNKNOWN";
 
 export class PipeError extends Error {
   readonly code: PipeErrorCode;

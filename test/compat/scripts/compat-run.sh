@@ -7,8 +7,30 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MATRIX="${SCRIPT_DIR}/../matrix.conf"
 ACTION="${1:-all}"
 
+# migrate 检查用：取矩阵里“下一个”非 legacy 版本的端口作为迁移目标。
+# 顺序即 matrix.conf 顺序；找不到（如最后一个版本）就回环到第一个非 legacy。
+# 不用 nameref/数组索引，保持 bash 3.2 兼容。
+migrate_target_port_for() {
+  local cur_version="$1"
+  local found=0 target="" first_nonlegacy_port=""
+  local v p a n
+  while IFS='|' read -r v p a n; do
+    [[ "$v" =~ ^#.*$ || -z "$v" ]] && continue
+    if [ -z "$first_nonlegacy_port" ] && [ "$a" != "legacy" ]; then
+      first_nonlegacy_port="$p"
+    fi
+    if [ "$found" -eq 1 ] && [ "$a" != "legacy" ]; then
+      target="$p"; break
+    fi
+    [ "$v" = "$cur_version" ] && found=1
+  done < "$MATRIX"
+  [ -z "$target" ] && target="$first_nonlegacy_port"
+  echo "$target"
+}
+
 run_for_all() {
   local fn="$1"
+  local version port adapter note
   while IFS='|' read -r version port adapter note; do
     [[ "$version" =~ ^#.*$ || -z "$version" ]] && continue
     "$fn" "$version" "$port" "$adapter"
@@ -20,6 +42,7 @@ do_up()      { "${SCRIPT_DIR}/up-and-init.sh" "$1" "$2"; }
 
 do_up_all_parallel() {
   local pids=()
+  local version port adapter note
   while IFS='|' read -r version port adapter note; do
     [[ "$version" =~ ^#.*$ || -z "$version" ]] && continue
     do_up "$version" "$port" &
@@ -32,8 +55,14 @@ do_up_all_parallel() {
 
 do_test() {
   local version="$1" port="$2"
-  echo ">> [${version}] 跑兼容性测试 (端口 ${port})"
-  "${SCRIPT_DIR}/run-tests.sh" "$version" "$port"
+  local target_port
+  target_port="$(migrate_target_port_for "$version")"
+  echo ">> [${version}] 跑兼容性测试 (端口 ${port}${target_port:+, migrate 目标 ${target_port}})"
+  if [ -n "$target_port" ]; then
+    "${SCRIPT_DIR}/run-tests.sh" "$version" "$port" "127.0.0.1" "$target_port"
+  else
+    "${SCRIPT_DIR}/run-tests.sh" "$version" "$port" "127.0.0.1"
+  fi
 }
 
 do_down() {

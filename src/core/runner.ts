@@ -138,10 +138,50 @@ export async function setupPipe(opts: PipeOpts): Promise<PipeContext> {
       dryRun: false,
       onConflict: "skip",
       fix: false,
+      publish: false,
       ...profileImportOpts,
     },
     config,
   };
+}
+
+/**
+ * 按 profile 名连接实例：只连 instance + workspace，不构建/测试 profile 的 storage。
+ * profile 不存在或其引用的 instance 不存在 → ERR_PROFILE_NOT_FOUND。
+ */
+export async function connectProfile(
+  config: Config,
+  name: string
+): Promise<{ client: DifyClient; name: string }> {
+  const profile = config.profiles[name];
+  if (!profile) {
+    throw new PipeError("ERR_PROFILE_NOT_FOUND", `Profile "${name}" 未找到`);
+  }
+  const instance = config.instances.find((i) => i.name === profile.instance);
+  if (!instance) {
+    throw new PipeError(
+      "ERR_PROFILE_NOT_FOUND",
+      `Profile "${name}" 引用的 instance "${profile.instance}" 未找到`
+    );
+  }
+
+  const client = new DifyClient({
+    baseUrl: instance.url,
+    email: instance.email,
+    password: instance.password,
+    token: instance.token,
+    timeout: instance.timeout ?? 30,
+    maxRetries: instance.maxRetries ?? 3,
+  });
+  const info = await client.connect();
+  log.success(`已连接 Dify ${info.version} (${info.adapterType} adapter)`);
+
+  if (profile.workspace) {
+    await client.switchWorkspace(profile.workspace);
+    log.info(`已切换到 Workspace: ${profile.workspace}`);
+  }
+
+  return { client, name: instance.name };
 }
 
 export function getClient(ctx: PipeContext, instanceId?: string): { client: DifyClient; name: string } {
