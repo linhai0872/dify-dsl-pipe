@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, unlinkSync, statSync } from "node:fs";
 import { resolve, dirname, join, relative } from "node:path";
 import type { StorageBackend } from "./interface.js";
+import { log } from "../utils/logger.js";
 
 export class LocalStorage implements StorageBackend {
   private basePath: string;
@@ -54,7 +55,14 @@ function walkDir(dir: string): string[] {
   const results: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    const stat = statSync(full);
+    let stat;
+    try {
+      stat = statSync(full);
+    } catch (e) {
+      // 悬空软链接等无法 stat 的条目：跳过，不让单个条目中断整个遍历
+      log.warn(`跳过无法读取的路径 ${full}（${(e as NodeJS.ErrnoException).code ?? e}）`);
+      continue;
+    }
     if (stat.isDirectory()) {
       results.push(...walkDir(full));
     } else {
