@@ -30,7 +30,7 @@ No installation required. Run directly with `npx`.
 <tr><td><b>Multi-instance Management</b></td><td>Manage prod, staging, and multi-tenant Dify environments through a single config file. Switch targets with <code>--profile</code>.</td></tr>
 <tr><td><b>Scheduled Backup Service</b></td><td>serve mode runs as a lightweight HTTP API with built-in cron job management and Webhook notifications for Slack, WeCom, DingTalk, and more.</td></tr>
 <tr><td><b>MCP Server</b></td><td>Exposes operations as a standard MCP Server. Claude Code, Cursor, OpenCode and other AI tools can manage Dify apps through tool calls.</td></tr>
-<tr><td><b>Auto Version Detection</b></td><td>Automatically detects Dify version and switches the correct Adapter, no manual configuration needed. Import and export are regression-verified against Dify 0.12–1.16 on real instances; 1.17 / 1.18 are adapted (1.18 exports YAML via <code>format=yaml</code>, surfaces import warnings, supports publishing) and covered by unit tests, with real-environment regression pending; versions before 0.12 support export and backup only.</td></tr>
+<tr><td><b>Auto Version Detection</b></td><td>Automatically detects Dify version and switches the correct Adapter, no manual configuration needed. Import, export and cross-version migration are regression-verified against Dify 0.12–1.18 on real instances (including 1.18 YAML export via <code>format=yaml</code> and plugin-dependency detection); versions before 0.12 support export and backup only.</td></tr>
 </table>
 
 ---

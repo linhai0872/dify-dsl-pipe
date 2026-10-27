@@ -7,24 +7,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MATRIX="${SCRIPT_DIR}/../matrix.conf"
 ACTION="${1:-all}"
 
-# migrate 检查用：取矩阵里“下一个”非 legacy 版本的端口作为迁移目标。
-# 顺序即 matrix.conf 顺序；找不到（如最后一个版本）就回环到第一个非 legacy。
+# migrate 检查用：取矩阵里“下一个”非 legacy 版本的端口作为迁移目标（只做升级方向）。
+# 顺序即 matrix.conf 顺序（低→高）；最后一个版本无目标，跳过 migrate（不回环做降级迁移）。
 # 不用 nameref/数组索引，保持 bash 3.2 兼容。
 migrate_target_port_for() {
   local cur_version="$1"
-  local found=0 target="" first_nonlegacy_port=""
+  local found=0 target=""
   local v p a n
   while IFS='|' read -r v p a n; do
     [[ "$v" =~ ^#.*$ || -z "$v" ]] && continue
-    if [ -z "$first_nonlegacy_port" ] && [ "$a" != "legacy" ]; then
-      first_nonlegacy_port="$p"
-    fi
     if [ "$found" -eq 1 ] && [ "$a" != "legacy" ]; then
       target="$p"; break
     fi
     [ "$v" = "$cur_version" ] && found=1
   done < "$MATRIX"
-  [ -z "$target" ] && target="$first_nonlegacy_port"
   echo "$target"
 }
 

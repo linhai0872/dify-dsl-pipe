@@ -196,13 +196,19 @@ describe("MCP tools", () => {
     const ctx = makeCtx();
     const { client } = await connect(ctx);
 
-    const { body, isError } = await callTool(client, "migrate_apps", {
-      from: "prod",
-      to: "staging",
-    });
+    // MCP 走默认 workdir（./.dify-pipe-migrate）：把 cwd 指到临时目录，避免写进仓库
+    const cwd = mkdtempSync(join(tmpdir(), "mcp-cwd-"));
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(cwd);
+    let res: Awaited<ReturnType<typeof callTool>>;
+    try {
+      res = await callTool(client, "migrate_apps", { from: "prod", to: "staging" });
+    } finally {
+      cwdSpy.mockRestore();
+    }
+    const { body, isError } = res;
     expect(isError).toBe(false);
     expect(body.command).toBe("migrate");
-    expect(body.meta?.workdir).toBeDefined();
+    expect(body.meta?.workdir?.startsWith(cwd)).toBe(true);
     expect(body.stats?.exported).toBe(1);
     // 预览：没有 POST /apps/imports
     const imports = calls.filter((c) => c.url.includes("/apps/imports") && c.method === "POST");

@@ -19,6 +19,9 @@ PROJ="dify-compat-${VERSION//./-}"
 SECRET_KEY="${COMPAT_SECRET_KEY:-compat-secret-$(echo -n "$VERSION" | md5sum | cut -c1-16)}"
 # 1.18 agent_backend 需要一个非空 token（本地 Agent 沙箱鉴权用；空值会导致 api 拒绝调用）。
 AGENT_API_TOKEN="${COMPAT_AGENT_API_TOKEN:-compat-agent-token-$(echo -n "$VERSION" | md5sum | cut -c1-16)}"
+# 1.18 agent_backend 要求 SERVER_SECRET_KEY 为 base64url 且解码后恰好 32 字节：
+# 取 32 个 ASCII 字符（13 + 19）再编码，去掉 padding（与官方 compose 默认值格式一致）
+AGENT_SECRET_KEY="${COMPAT_AGENT_SECRET_KEY:-$(printf 'compat-agent-%s' "$(echo -n "$VERSION" | md5sum | cut -c1-19)" | base64 | tr -d '=\n' | tr '+/' '-_')}"
 
 mkdir -p "$ENVDIR"
 
@@ -224,6 +227,10 @@ cat >> docker-compose.minimal.yaml <<EOF
       DIFY_AGENT_INNER_API_KEY: ${PLUGIN_DIFY_INNER_API_KEY}
       DIFY_AGENT_RUNTIME_BACKEND: local
       DIFY_AGENT_API_TOKEN: ${AGENT_API_TOKEN}
+      # local runtime 启动即校验 sandbox token 非空（即使冒烟不起 local_sandbox）；secret key 派生 Agent Stub 的 JWE 密钥
+      DIFY_AGENT_LOCAL_SANDBOX_ENDPOINT: http://local_sandbox:5004
+      DIFY_AGENT_LOCAL_SANDBOX_AUTH_TOKEN: ${AGENT_API_TOKEN}-sandbox
+      DIFY_AGENT_SERVER_SECRET_KEY: ${AGENT_SECRET_KEY}
     depends_on:
       redis:
         condition: service_started

@@ -183,16 +183,27 @@ if [ -n "$MIGRATE_TARGET_PORT" ]; then
     fail "目标实例导出失败"; cat "${WORK}/export-target.err" >> "$LOG"
   fi
 
-  if node "$CLI" diff --baseline "$MIGRATE_BASELINE" -s "${WORK}/out-target" --json \
+  if node "$CLI" diff --baseline "$MIGRATE_BASELINE" -s "${WORK}/out-target" --show-chunks --json \
       -c "$MIGRATE_CONF" > "${WORK}/diff.json" 2>"${WORK}/diff.err"; then
-    # --baseline 模式下 baseline（源导出）是"线上侧"，-s（目标导出）是"备份侧"：
-    # 源有、目标无 → DRIFT_ONLY_ONLINE（丢失）；目标多出的应用（ONLY_IN_BACKUP）不算失败
-    drift=$(count_code "${WORK}/diff.json" DRIFT_CONTENT)
+    # --baseline 模式下 baseline（源快照）是"线上侧"（chunk.online），-s（目标导出）是"备份侧"（chunk.backup）：
+    # - 源有、目标无的应用 → DRIFT_ONLY_ONLINE（丢失）
+    # - 跨版本时目标 Dify 导出会补新字段（1.10 rag_pipeline_variables、1.14 icon_type、1.18 site），
+    #   这些 chunk 的源侧为 "undefined"，不算丢失；源侧已有的值被改/删才算（altered）
+    # 目标多出的应用（ONLY_IN_BACKUP）不算失败
     missing=$(count_code "${WORK}/diff.json" DRIFT_ONLY_ONLINE)
-    if [ "${drift:-0}" -eq 0 ] && [ "${missing:-0}" -eq 0 ]; then
-      pass "diff --baseline 迁移前后语义一致（无 DRIFT_CONTENT / 无丢失）"
+    altered=$(node -e "
+      const r = JSON.parse(require('node:fs').readFileSync('${WORK}/diff.json', 'utf-8'));
+      let n = 0;
+      for (const i of r.items ?? []) {
+        if (i.code !== 'DRIFT_CONTENT') continue;
+        for (const c of JSON.parse(i.detail ?? '[]')) if (c.online !== 'undefined') { n++; console.error('  altered: ' + i.app + ' ' + c.path); }
+      }
+      console.log(n);
+    " 2>>"$LOG" || echo 1)
+    if [ "${altered:-1}" -eq 0 ] && [ "${missing:-0}" -eq 0 ]; then
+      pass "diff --baseline 源应用内容在目标完整保留（仅目标版本新增字段）"
     else
-      fail "迁移后 diff 发现内容漂移 (DRIFT_CONTENT=${drift:-0} ONLY_ONLINE=${missing:-0})"
+      fail "迁移后源内容丢失或被改动 (altered=${altered:-?} ONLY_ONLINE=${missing:-0})"
       cat "${WORK}/diff.json" >> "$LOG"
     fi
   else

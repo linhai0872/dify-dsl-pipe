@@ -24,8 +24,8 @@ ssh "${GZ_SSH}" "bash /opt/dify-compat/scripts/compat-run.sh up" 2>&1 \
 
 echo "==> 3/3 逐版本冒烟测试"
 overall=0
-# migrate roundtrip 需要一个目标版本：取矩阵中下一个非 legacy 版本（环绕）；
-# 与 compat-run.sh 的规则保持一致。
+# migrate roundtrip 需要一个目标版本：取矩阵中下一个非 legacy 版本（只做升级方向，
+# 最后一个版本跳过，不回环降级）；与 compat-run.sh 的规则保持一致。
 matrix_lines=()
 while IFS= read -r line; do
   [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
@@ -42,12 +42,6 @@ migrate_target_port() {
       IFS='|' read -r _v _p _a _n <<< "${matrix_lines[$j]}"
       [ "$_a" != "legacy" ] && { target="$_p"; break; }
     done
-    if [ -z "$target" ]; then
-      for j in "${!matrix_lines[@]}"; do
-        IFS='|' read -r _v _p _a _n <<< "${matrix_lines[$j]}"
-        [ "$_a" != "legacy" ] && { target="$_p"; break; }
-      done
-    fi
     break
   done
   echo "$target"
