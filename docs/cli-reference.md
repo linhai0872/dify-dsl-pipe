@@ -320,6 +320,7 @@ npx dify-dsl-pipe presets
 | `DSL_VERSION_MISMATCH` | warning | DSL major 版本与目标 Dify 不一致，或 diff 两侧 DSL version 不同 |
 | `AGENT_ASSETS_OMITTED` | warning | 内嵌 Agent 包的 Skill / 文件未随 YAML 导出携带；建议改用 .ifpkg（Dify UI）迁移该应用 |
 | `DIFY_IMPORT_WARNING` | warning | Dify 导入接口返回的 warning（1.18 `completed-with-warnings`），detail 带原始 code/path/message |
+| `AGENT_OVERWRITE_UNSUPPORTED` | warning | `--on-conflict overwrite` 遇到同名 Agent 应用（1.18+）：Dify 不支持覆盖，已跳过，计入 skipped |
 | `NOT_PUBLISHED` | info | 应用已导入为草稿未发布：新建→发布前 Service API / Web App 不可用；覆盖→线上仍运行旧发布版本 |
 | `PUBLISH_FAILED` | warning | 导入成功但发布失败（应用保留已导入状态，计入 stats.publishFailed，命令 success=false） |
 | `DUPLICATE_NAME` | warning | diff 中同一侧重名（不区分大小写），该名字不参与比较 |

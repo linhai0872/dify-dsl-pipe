@@ -122,6 +122,37 @@ describe("importApps", () => {
     expect(r.overwritten).toHaveLength(1);
   });
 
+  // 实测（GZ 1.18.0）：覆盖已有 Agent 应用 → HTTP 400 "Agent DSL import only supports creating a new Agent App"
+  it("overwrite 遇到已有 Agent 应用 → 跳过并报 AGENT_OVERWRITE_UNSUPPORTED，其他应用照常覆盖", async () => {
+    const storage = tmpStorage({
+      "agent.yml": dslDoc({ name: "Ag", mode: "agent" }),
+      "flow.yml": dslDoc({ name: "Flow", mode: "workflow" }),
+    });
+    const { client, calls } = fakeClient({
+      existingApps: [
+        { id: "ag-1", name: "Ag", mode: "agent" },
+        { id: "wf-1", name: "Flow", mode: "workflow" },
+      ],
+    });
+    const r = await importApps(client, storage, { ...baseOpts, onConflict: "overwrite" });
+
+    expect(calls.importAppDSL).toHaveLength(1);
+    expect(r.overwritten.map((o) => o.name)).toEqual(["Flow"]);
+    expect(r.skipped.map((s) => s.name)).toEqual(["Ag"]);
+    expect(r.failed).toHaveLength(0);
+    const issue = r.issues.find((i) => i.code === "AGENT_OVERWRITE_UNSUPPORTED");
+    expect(issue).toMatchObject({ severity: "warning", app: "Ag" });
+  });
+
+  it("dry-run 同样把已有 Agent 应用的 overwrite 计为跳过", async () => {
+    const storage = tmpStorage({ "agent.yml": dslDoc({ name: "Ag", mode: "agent" }) });
+    const { client } = fakeClient({ existingApps: [{ id: "ag-1", name: "Ag", mode: "agent" }] });
+    const r = await importApps(client, storage, { ...baseOpts, dryRun: true, onConflict: "overwrite" });
+
+    expect(r.skipped.map((s) => s.name)).toEqual(["Ag"]);
+    expect(r.overwritten).toHaveLength(0);
+  });
+
   it("chat 应用不报 NOT_PUBLISHED", async () => {
     const storage = tmpStorage({ "a.yml": dslDoc({ name: "A", mode: "chat" }) });
     const { client } = fakeClient();

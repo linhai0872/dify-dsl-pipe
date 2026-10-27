@@ -18,7 +18,8 @@ export type AppMode =
   | "agent-chat"
   | "completion"
   | "workflow"
-  | "advanced-chat";
+  | "advanced-chat"
+  | "agent"; // Dify 1.18+
 
 export interface DifyTag {
   id: string;

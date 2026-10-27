@@ -18,6 +18,7 @@ export type IssueCode =
   | "DRIFT_ONLY_ONLINE"
   | "AGENT_ASSETS_OMITTED"
   | "DIFY_IMPORT_WARNING"
+  | "AGENT_OVERWRITE_UNSUPPORTED"
   | "NOT_PUBLISHED"
   | "PUBLISH_FAILED"
   | "DUPLICATE_NAME"
@@ -70,12 +71,13 @@ export function buildReport(
   };
 }
 
-/** 人类输出需逐条告知的 code（草稿未发布 / Agent 资源缺失 / Dify 导入警告 / 发布失败）。 */
+/** 人类输出需逐条告知的 code（草稿未发布 / Agent 资源缺失 / Dify 导入警告 / Agent 不可覆盖 / 发布失败）。 */
 const NOTICE_CODES: ReadonlySet<IssueCode> = new Set<IssueCode>([
   "NOT_PUBLISHED",
   "PUBLISH_FAILED",
   "AGENT_ASSETS_OMITTED",
   "DIFY_IMPORT_WARNING",
+  "AGENT_OVERWRITE_UNSUPPORTED",
 ]);
 
 /** 挑出需逐条展示给用户的条目（import / migrate 非 JSON 输出用）。 */

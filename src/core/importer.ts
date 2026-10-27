@@ -73,7 +73,20 @@ export async function importApps(
       let reason: string | undefined;
 
       if (existing) {
-        if (opts.onConflict === "overwrite") {
+        // Dify 1.18 拒绝覆盖已有 Agent 应用（HTTP 400 "only supports creating a new Agent App"）
+        const isAgent = existing.mode === "agent" || extractAppMode(content) === "agent";
+        if (opts.onConflict === "overwrite" && isAgent) {
+          action = "skip";
+          reason = "Dify 不支持覆盖 Agent 应用";
+          issues.push({
+            severity: "warning",
+            code: "AGENT_OVERWRITE_UNSUPPORTED",
+            app: name,
+            file,
+            problem: `同名 Agent 应用已存在（${existing.id.slice(0, 8)}），Dify 不支持覆盖 Agent 应用，已跳过`,
+            suggestion: "在 Dify 中删除或改名旧应用后重新导入",
+          });
+        } else if (opts.onConflict === "overwrite") {
           action = "overwrite";
         } else {
           action = "skip";
