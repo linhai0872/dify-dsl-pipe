@@ -152,6 +152,10 @@ export function registerExportCommand(program: Command) {
           if (agentAssetCount) {
             log.warn(`${agentAssetCount} 个应用含内嵌 Agent 且 Skill/文件未随 YAML 携带，导入后需手动补齐`);
           }
+
+          for (const i of allIssues.filter((i) => i.code === "DUPLICATE_NAME")) {
+            log.warn(`[DUPLICATE_NAME] ${i.app}：与其他应用重名，已写入 ${i.file}`);
+          }
         }
 
         process.exit(hasError ? 1 : 0);

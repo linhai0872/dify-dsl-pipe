@@ -50,6 +50,9 @@ export async function exportApps(
     return { success: [], failed: [], totalApps: 0, duration: Date.now() - start };
   }
 
+  // 重名判定基于全部应用：文件名不随 filter / 增量导出的子集变化
+  const collided = findPathCollisions(filter ? await client.getAllApps() : apps, opts);
+
   // 增量过滤
   let appsToExport = apps;
   if (state) {
@@ -71,7 +74,7 @@ export async function exportApps(
     log.progress(i + 1, appsToExport.length, `${app.name} (${app.mode})`);
 
     try {
-      const exported = await exportSingleApp(client, storage, app, opts);
+      const exported = await exportSingleApp(client, storage, app, opts, collided.has(app.id));
       success.push(exported);
 
       if (state) {
@@ -140,14 +143,12 @@ async function exportSingleApp(
   client: DifyClient,
   storage: StorageBackend,
   app: DifyApp,
-  opts: ExportOptions & { instanceName?: string; workspaceName?: string }
+  opts: ExportOptions & { instanceName?: string; workspaceName?: string },
+  collided = false
 ): Promise<ExportedApp> {
-  const tags = (app.tags ?? []).map((t) => t.name);
   const ctx = {
-    app,
-    tags,
-    instance: opts.instanceName,
-    workspace: opts.workspaceName,
+    ...namingContext(app, opts),
+    nameSuffix: collided ? `__${app.id.slice(0, 8)}` : undefined,
   };
 
   // 导出当前版本
@@ -161,11 +162,21 @@ async function exportSingleApp(
 
   // 对最终 DSL 跑 AGENT_ASSETS_OMITTED（不阻断，仅报告）
   const agentIssues = checkAgentAssets(curDsl, { app: app.name, file: filePath });
+  const dupIssues: RuleIssue[] = collided
+    ? [{
+        severity: "warning",
+        code: "DUPLICATE_NAME",
+        app: app.name,
+        file: filePath,
+        problem: `与其他应用重名，文件名加 id 后缀以免覆盖`,
+        suggestion: "在 Dify 中给应用改成唯一名称",
+      }]
+    : [];
   const exported: ExportedApp = {
     app,
     dslContent: curDsl,
     filePath,
-    issues: [...curIssues, ...agentIssues],
+    issues: [...curIssues, ...agentIssues, ...dupIssues],
   };
 
   // 导出版本历史
@@ -218,6 +229,33 @@ async function exportSingleApp(
   }
 
   return exported;
+}
+
+function namingContext(app: DifyApp, opts: { instanceName?: string; workspaceName?: string }) {
+  return {
+    app,
+    tags: (app.tags ?? []).map((t) => t.name),
+    instance: opts.instanceName,
+    workspace: opts.workspaceName,
+  };
+}
+
+/**
+ * 主文件路径冲突（不区分大小写，兼容大小写不敏感文件系统）的应用 id。
+ * 列表按创建时间升序：先出现的保留原名，之后的同路径应用需加后缀。
+ */
+function findPathCollisions(
+  apps: DifyApp[],
+  opts: ExportOptions & { instanceName?: string; workspaceName?: string }
+): Set<string> {
+  const seen = new Set<string>();
+  const collided = new Set<string>();
+  for (const app of apps) {
+    const key = buildFilePath(opts.pattern, { ...namingContext(app, opts), version: "current" }).toLowerCase();
+    if (seen.has(key)) collided.add(app.id);
+    else seen.add(key);
+  }
+  return collided;
 }
 
 function buildFilter(opts: ExportOptions): AppFilter | undefined {

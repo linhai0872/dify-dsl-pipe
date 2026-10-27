@@ -15,6 +15,8 @@ interface NamingContext {
   workspace?: string;
   version?: string;
   date?: string;
+  /** 重名应用的区分后缀，拼在清洗后的 {name} 之后（不受 80 字符截断影响） */
+  nameSuffix?: string;
 }
 
 export function resolvePattern(pattern: string): string {
@@ -25,7 +27,7 @@ export function buildFilePath(pattern: string, ctx: NamingContext): string {
   const resolved = resolvePattern(pattern);
   const date = ctx.date ?? formatDate(new Date());
   const tags = ctx.tags?.length ? ctx.tags.join("-") : "untagged";
-  const safeName = sanitize(ctx.app.name);
+  const safeName = sanitize(ctx.app.name) + (ctx.nameSuffix ?? "");
 
   let path = resolved
     .replaceAll("{name}", safeName)
