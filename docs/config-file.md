@@ -95,7 +95,7 @@ defaults:
     dryRun: false
   notification:
     enabled: false          # 全局开关，true 时才发送通知
-    webhookUrl: ""          # Slack / 企业微信 / 钉钉 / 通用 HTTP POST
+    webhookUrl: ""          # Slack / 企业微信 / 钉钉 / 飞书 / 通用 HTTP POST
     onFailure: true
     onSuccess: false
 ```

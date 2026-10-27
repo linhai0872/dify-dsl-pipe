@@ -6,6 +6,7 @@ import { importApps } from "../core/importer.js";
 import type { StorageBackend } from "../storage/interface.js";
 import type { ExportOptions, ImportOptions } from "../config/types.js";
 import { log } from "../utils/logger.js";
+import { sendWebhook } from "./webhook.js";
 
 export interface NotificationConfig {
   enabled: boolean;
@@ -150,21 +151,21 @@ export function createApi(ctx: ServeContext) {
           job.lastResult = { success: result.success.length, failed: result.failed.length };
           const hasFailed = result.failed.length > 0;
           if (shouldNotify(ctx, hasFailed)) {
-            await sendWebhook(ctx, `导出完成: ${result.success.length} 成功, ${result.failed.length} 失败`);
+            await notify(`导出完成: ${result.success.length} 成功, ${result.failed.length} 失败`);
           }
         } else {
           const result = await importApps(entry.client, ctx.storage, ctx.importOpts);
           job.lastResult = { success: result.created.length, failed: result.failed.length };
           const hasFailed = result.failed.length > 0;
           if (shouldNotify(ctx, hasFailed)) {
-            await sendWebhook(ctx, `导入完成: ${result.created.length} 创建, ${result.failed.length} 失败`);
+            await notify(`导入完成: ${result.created.length} 创建, ${result.failed.length} 失败`);
           }
         }
       } catch (e) {
         job.lastResult = { success: 0, failed: -1 };
         log.error(`[cron] ${id} failed: ${e instanceof Error ? e.message : e}`);
         if (shouldNotify(ctx, true)) {
-          await sendWebhook(ctx, `任务失败: ${e instanceof Error ? e.message : e}`);
+          await notify(`任务失败: ${e instanceof Error ? e.message : e}`);
         }
       }
       job.lastRun = new Date().toISOString();
@@ -198,17 +199,9 @@ function shouldNotify(ctx: ServeContext, hasFailed: boolean): boolean {
   return n.onSuccess;
 }
 
-async function sendWebhook(_ctx: ServeContext, message: string) {
+async function notify(message: string) {
   if (!webhookUrl) return;
-  try {
-    await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text: message, content: message }),
-    });
-  } catch {
-    log.debug(`Webhook 发送失败: ${webhookUrl}`);
-  }
+  await sendWebhook(webhookUrl, message);
 }
 
 export function stopAllJobs() {
